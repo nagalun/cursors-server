@@ -1,0 +1,1 @@
+[{"startpos":{"x":20,"y":20},"objects":[{"type":"button","x":40,"y":40,"w":40,"h":80,"count":12,"color":"FF00FF00"},{"type":"text","x":200,"y":20,"size":16,"centered":true,"string":"Multimap support is almost done, no checking for collisions yet."},{"type":"wall","x":200,"y":150,"w":40,"h":40,"color":"00FF00FF"}]}]
