@@ -3,6 +3,7 @@
 #include <map>
 #include <mutex>
 #include <unordered_map>
+#include <sys/time.h>
 
 #include <websocketpp/common/thread.hpp>
 #include <websocketpp/config/asio_no_tls.hpp>
@@ -37,18 +38,14 @@ struct click_t {
 	uint16_t y;
 };
 
-struct clqueue_t {
-	std::vector<click_t> queue;
-};
-
-struct drqueue_t {
-	std::vector<line_t> queue;
-};
-
 struct mapobj_active_t {
+	uint16_t x;
+	uint16_t y;
+	uint16_t w; // width
+	uint16_t h; // height
 	uint16_t count;
 	uint16_t maxcount;
-	uint32_t linkedid;
+	uint32_t color;
 };
 
 struct mapobj_wall_t {
@@ -60,12 +57,23 @@ struct mapobj_wall_t {
 	bool removed;
 };
 
+struct mapobj_exit_t {
+	uint16_t x;
+	uint16_t y;
+	uint16_t w;
+	uint16_t h;
+	bool isbad;
+};
+
 struct mapprop_t {
-	drqueue_t draw_q;
-	clqueue_t click_q;
+	std::vector<line_t> draw_q;
+	std::vector<click_t> click_q;
+	std::vector<std::vector<uint8_t>> objupd_q;
+	std::vector<uint32_t> removed_q;
 	std::unordered_map<uint32_t, mapobj_wall_t> walls;
-	std::unordered_map<uint32_t, mapobj_active_t> buttons;
+	std::unordered_map<uint32_t, std::pair<mapobj_active_t, long int>> buttons;
 	std::unordered_map<uint32_t, mapobj_active_t> areas;
+	std::unordered_map<uint32_t, mapobj_exit_t> exits;
 	std::array<uint16_t, 2> startpoint;
 	std::vector<uint8_t> bytes;
 	bool updated;
@@ -77,6 +85,7 @@ struct cursor_t {
 	uint16_t y;
 	uint32_t mapid;
 	bool correct;
+	bool started;
 };
 
 union uint16_converter {
@@ -109,8 +118,11 @@ namespace cursorsio {
 			void on_message(wsserver* s, websocketpp::connection_hdl hdl, wsserver::message_ptr msg);
 			
 			void process_updates(wsserver* s, mapprop_t *map, uint32_t mapid);
+			void button_thread();
 			
 			void teleport_client(wsserver* s, websocketpp::connection_hdl hdl, uint16_t x, uint16_t y, uint32_t G);
+			void nextmap(uint32_t mapid, websocketpp::connection_hdl hdl);
+			bool checkpos(uint16_t x, uint16_t y, uint32_t mapid, websocketpp::connection_hdl hdl, bool click);
 			
 			void free_id(uint32_t id){ freed_ids.push(id); };
 			uint32_t get_id(){
@@ -128,10 +140,12 @@ namespace cursorsio {
 			std::vector<mapprop_t> maps;
 			std::mutex conn_mmtx;
 			
-			bool playerCountChanged = false;
+			uint32_t playerCountChanged = 0;
 			
 			uint32_t used_ids = 0;
 			std::queue<uint32_t> freed_ids;
+			
+			uint32_t defaultmap = 0;
 	};
 }
 

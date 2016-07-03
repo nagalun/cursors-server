@@ -19,8 +19,12 @@ std::vector<uint8_t> cursorsio::map::create_text(uint16_t x, uint16_t y,
 
 std::vector<uint8_t> cursorsio::map::create_wall(uint16_t x, uint16_t y,
 						 uint16_t width, uint16_t height,
-						 uint32_t color){
-	std::vector<uint8_t> object = {WALL};
+						 uint32_t color, uint32_t id,
+						 bool isupdate){
+	std::vector<uint8_t> object;
+	if(isupdate)
+		addtoarr(id, object);
+	object.push_back({WALL});
 	addtoarr(x, object);
 	addtoarr(y, object);
 	addtoarr(width, object);
@@ -31,8 +35,12 @@ std::vector<uint8_t> cursorsio::map::create_wall(uint16_t x, uint16_t y,
 
 std::vector<uint8_t> cursorsio::map::create_exit(uint16_t x, uint16_t y,
 						 uint16_t width, uint16_t height,
-						 bool isBad){
-	std::vector<uint8_t> object = {EXIT};
+						 bool isBad, uint32_t id,
+						 bool isupdate){
+	std::vector<uint8_t> object;
+	if(isupdate)
+		addtoarr(id, object);
+	object.push_back({EXIT});
 	addtoarr(x, object);
 	addtoarr(y, object);
 	addtoarr(width, object);
@@ -43,8 +51,12 @@ std::vector<uint8_t> cursorsio::map::create_exit(uint16_t x, uint16_t y,
 
 std::vector<uint8_t> cursorsio::map::create_area(uint16_t x, uint16_t y,
 						 uint16_t width, uint16_t height,
-						 uint16_t count, uint32_t color){
-	std::vector<uint8_t> object = {AREA_TRIGGER};
+						 uint16_t count, uint32_t color,
+						 uint32_t id, bool isupdate){
+	std::vector<uint8_t> object;
+	if(isupdate)
+		addtoarr(id, object);
+	object.push_back({AREA_TRIGGER});
 	addtoarr(x, object);
 	addtoarr(y, object);
 	addtoarr(width, object);
@@ -56,8 +68,12 @@ std::vector<uint8_t> cursorsio::map::create_area(uint16_t x, uint16_t y,
 
 std::vector<uint8_t> cursorsio::map::create_button(uint16_t x, uint16_t y,
 						   uint16_t width, uint16_t height,
-						   uint16_t count, uint32_t color){
-	std::vector<uint8_t> object = {BUTTON};
+						   uint16_t count, uint32_t color,
+						   uint32_t id, bool isupdate){
+	std::vector<uint8_t> object;
+	if(isupdate)
+		addtoarr(id, object);
+	object.push_back({BUTTON});
 	addtoarr(x, object);
 	addtoarr(y, object);
 	addtoarr(width, object);
@@ -67,6 +83,7 @@ std::vector<uint8_t> cursorsio::map::create_button(uint16_t x, uint16_t y,
 	return object;
 }
 
+// this might change
 void cursorsio::map::parse(cursorsio::server* s, const std::string & mapdata, std::vector<mapprop_t> & maps){
 	nlohmann::json mapjson = nlohmann::json::parse(mapdata);
 	for(auto& map : mapjson){
@@ -79,7 +96,6 @@ void cursorsio::map::parse(cursorsio::server* s, const std::string & mapdata, st
 		uint16_t objectCount = map["objects"].size();
 		addtoarr(objectCount, newmap.bytes);
 		newmap.startpoint = { x, y };
-		std::queue<uint16_t> links;
 		for(auto& object : map["objects"]){
 			uint32_t id = s->get_id();
 			addtoarr(id, newmap.bytes);
@@ -97,32 +113,33 @@ void cursorsio::map::parse(cursorsio::server* s, const std::string & mapdata, st
 				uint16_t w = object["w"].get<uint16_t>();
 				uint16_t h = object["h"].get<uint16_t>();
 				uint32_t color = std::stoul(object["color"].get<std::string>(), nullptr, 16);
-				if(!links.empty()){
-					uint32_t btnid = links.front();
-					try {
-						newmap.buttons.at(btnid);
-						newmap.buttons[btnid].linkedid = id;
-					} catch(const std::out_of_range){  }
-					links.pop();
-				}
 				newmap.walls[id] = {x, y, w, h, color, false};
 				std::vector<uint8_t> b = cursorsio::map::create_wall(x, y, w, h, color);
 				newmap.bytes.insert(newmap.bytes.end(), &b[0], &b[b.size()]);
 			} else if(t == "exit") {
-				
-			} else if(t == "area") {
-				
-			} else if(t == "button") {
+				uint16_t x = object["x"].get<uint16_t>();
+				uint16_t y = object["y"].get<uint16_t>();
+				uint16_t w = object["w"].get<uint16_t>();
+				uint16_t h = object["h"].get<uint16_t>();
+				bool isbad = object["isbad"].get<bool>();
+				newmap.exits[id] = {x, y, w, h, isbad};
+				std::vector<uint8_t> b = cursorsio::map::create_exit(x, y, w, h, isbad);
+				newmap.bytes.insert(newmap.bytes.end(), &b[0], &b[b.size()]);
+			} else if(t == "button" || t == "area") {
 				uint16_t x = object["x"].get<uint16_t>();
 				uint16_t y = object["y"].get<uint16_t>();
 				uint16_t w = object["w"].get<uint16_t>();
 				uint16_t h = object["h"].get<uint16_t>();
 				uint16_t count = object["count"].get<uint16_t>();
 				uint32_t color = std::stoul(object["color"].get<std::string>(), nullptr, 16);
-				uint16_t linkto = id;
-				links.push(linkto);
-				newmap.buttons[id] = {count, count};
-				std::vector<uint8_t> b = cursorsio::map::create_button(x, y, w, h, count, color);
+				std::vector<uint8_t> b;
+				if(t == "button"){
+					newmap.buttons[id].first = {x, y, w, h, count, count, color};
+					b = cursorsio::map::create_button(x, y, w, h, count, color);
+				} else {
+					newmap.areas[id] = {x, y, w, h, count, count, color};
+					b = cursorsio::map::create_area(x, y, w, h, count, color);
+				}
 				newmap.bytes.insert(newmap.bytes.end(), &b[0], &b[b.size()]);
 			}
 		}
