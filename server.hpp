@@ -64,6 +64,7 @@ struct mapobj_exit_t {
 	uint16_t w;
 	uint16_t h;
 	bool isbad;
+	int offset;
 };
 
 struct mapprop_t {
@@ -142,6 +143,8 @@ namespace cursorsio {
 			wsserver s;
 			
 			std::vector<mapprop_t> maps;
+			
+			std::mutex conn_mmtx;
 			
 			uint32_t used_ids = 0;
 			std::queue<uint32_t> freed_ids;

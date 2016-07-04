@@ -122,7 +122,11 @@ void cursorsio::map::parse(cursorsio::server* s, const std::string & mapdata, st
 				uint16_t w = object["w"].get<uint16_t>();
 				uint16_t h = object["h"].get<uint16_t>();
 				bool isbad = object["isbad"].get<bool>();
-				newmap.exits[id] = {x, y, w, h, isbad};
+				int offset = 1;
+				if(object["offset"].is_number()){
+					offset = object["offset"].get<int>();
+				}
+				newmap.exits[id] = {x, y, w, h, isbad, offset};
 				std::vector<uint8_t> b = cursorsio::map::create_exit(x, y, w, h, isbad);
 				newmap.bytes.insert(newmap.bytes.end(), &b[0], &b[b.size()]);
 			} else if(t == "button" || t == "area") {
