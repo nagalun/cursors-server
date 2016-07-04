@@ -137,7 +137,7 @@ void cursorsio::map::parse(cursorsio::server* s, const std::string & mapdata, st
 					newmap.buttons[id].first = {x, y, w, h, count, count, color};
 					b = cursorsio::map::create_button(x, y, w, h, count, color);
 				} else {
-					newmap.areas[id] = {x, y, w, h, count, count, color};
+					newmap.areas[id].first = {x, y, w, h, count, count, color};
 					b = cursorsio::map::create_area(x, y, w, h, count, color);
 				}
 				newmap.bytes.insert(newmap.bytes.end(), &b[0], &b[b.size()]);

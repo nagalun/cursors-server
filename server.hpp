@@ -3,6 +3,7 @@
 #include <map>
 #include <mutex>
 #include <unordered_map>
+#include <set>
 #include <sys/time.h>
 
 #include <websocketpp/common/thread.hpp>
@@ -72,11 +73,12 @@ struct mapprop_t {
 	std::vector<uint32_t> removed_q;
 	std::unordered_map<uint32_t, mapobj_wall_t> walls;
 	std::unordered_map<uint32_t, std::pair<mapobj_active_t, long int>> buttons;
-	std::unordered_map<uint32_t, mapobj_active_t> areas;
+	std::unordered_map<uint32_t, std::pair<mapobj_active_t, std::set<websocketpp::connection_hdl, std::owner_less<websocketpp::connection_hdl>>>> areas;
 	std::unordered_map<uint32_t, mapobj_exit_t> exits;
 	std::array<uint16_t, 2> startpoint;
 	std::vector<uint8_t> bytes;
 	bool updated;
+	uint32_t updatetime;
 };
 
 struct cursor_t {
@@ -117,9 +119,10 @@ namespace cursorsio {
 			void on_close(wsserver* s, websocketpp::connection_hdl hdl);
 			void on_message(wsserver* s, websocketpp::connection_hdl hdl, wsserver::message_ptr msg);
 			
-			void process_updates(wsserver* s, mapprop_t *map, uint32_t mapid);
+			void process_updates(wsserver* s, mapprop_t *map, uint32_t mapid, bool bypass = false);
 			void button_thread();
 			
+			void kick(websocketpp::connection_hdl hdl, bool close = true);
 			void teleport_client(wsserver* s, websocketpp::connection_hdl hdl, uint16_t x, uint16_t y, uint32_t G);
 			void nextmap(uint32_t mapid, websocketpp::connection_hdl hdl);
 			bool checkpos(uint16_t x, uint16_t y, uint32_t mapid, websocketpp::connection_hdl hdl, bool click);
