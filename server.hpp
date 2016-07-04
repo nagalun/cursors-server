@@ -77,8 +77,9 @@ struct mapprop_t {
 	std::unordered_map<uint32_t, mapobj_exit_t> exits;
 	std::array<uint16_t, 2> startpoint;
 	std::vector<uint8_t> bytes;
-	bool updated;
 	uint32_t updatetime;
+	bool updplayercount;
+	bool lastcwasupdate;
 };
 
 struct cursor_t {
@@ -86,8 +87,6 @@ struct cursor_t {
 	uint16_t x;
 	uint16_t y;
 	uint32_t mapid;
-	bool correct;
-	bool started;
 };
 
 union uint16_converter {
@@ -119,12 +118,14 @@ namespace cursorsio {
 			void on_close(wsserver* s, websocketpp::connection_hdl hdl);
 			void on_message(wsserver* s, websocketpp::connection_hdl hdl, wsserver::message_ptr msg);
 			
+			void updateplayercount();
 			void process_updates(wsserver* s, mapprop_t *map, uint32_t mapid, bool bypass = false);
 			void button_thread();
 			
 			void kick(websocketpp::connection_hdl hdl, bool close = true);
 			void teleport_client(wsserver* s, websocketpp::connection_hdl hdl, uint16_t x, uint16_t y, uint32_t G);
 			void nextmap(uint32_t mapid, websocketpp::connection_hdl hdl);
+			void sendmapstate(uint32_t mapid, websocketpp::connection_hdl hdl);
 			bool checkpos(uint16_t x, uint16_t y, uint32_t mapid, websocketpp::connection_hdl hdl, bool click);
 			
 			void free_id(uint32_t id){ freed_ids.push(id); };
@@ -141,9 +142,6 @@ namespace cursorsio {
 			wsserver s;
 			
 			std::vector<mapprop_t> maps;
-			std::mutex conn_mmtx;
-			
-			uint32_t playerCountChanged = 0;
 			
 			uint32_t used_ids = 0;
 			std::queue<uint32_t> freed_ids;
