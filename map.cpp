@@ -86,6 +86,15 @@ std::vector<uint8_t> cursorsio::map::create_button(uint16_t x, uint16_t y,
 // this might change
 void cursorsio::map::parse(cursorsio::server* s, const std::string & mapdata, std::vector<mapprop_t> & maps){
 	nlohmann::json mapjson = nlohmann::json::parse(mapdata);
+	std::map<std::string, uint32_t> links;
+	uint32_t mapid = 0;
+	for(auto& map : mapjson){
+		if(map["tag"].is_string()){
+			links[map["tag"].get<std::string>()] = mapid;
+		}
+		mapid++;
+	}
+	mapid = 0;
 	for(auto& map : mapjson){
 		mapprop_t newmap;
 		newmap.bytes = {STYPE_MAP_CHANGE};
@@ -123,10 +132,20 @@ void cursorsio::map::parse(cursorsio::server* s, const std::string & mapdata, st
 				uint16_t h = object["h"].get<uint16_t>();
 				bool isbad = object["isbad"].get<bool>();
 				int offset = 1;
+				uint32_t linkto = maps.size();
 				if(object["offset"].is_number()){
 					offset = object["offset"].get<int>();
 				}
-				newmap.exits[id] = {x, y, w, h, isbad, offset};
+				if(object["tag"].is_string()){
+					std::string tag = object["tag"].get<std::string>();
+					try {
+						links.at(tag);
+						linkto = links[tag];
+						offset--;
+					} catch(std::out_of_range) { }
+				}
+				linkto = linkto + offset;
+				newmap.exits[id] = {x, y, w, h, isbad, linkto};
 				std::vector<uint8_t> b = cursorsio::map::create_exit(x, y, w, h, isbad);
 				newmap.bytes.insert(newmap.bytes.end(), &b[0], &b[b.size()]);
 			} else if(t == "button" || t == "area") {

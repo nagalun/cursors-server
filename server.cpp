@@ -15,9 +15,9 @@
  * Add more comments
  * Limit how much data a client can send, and kick if too much
  * Remove unused variables
- * Fix player count
  * Clean way of shutting down the server
  * Fix instant area -> exit move
+ * Use asio timers instead of threads?
  ***/
 
 long int js_date_now(){
@@ -27,18 +27,53 @@ long int js_date_now(){
 	return ms;
 }
 
-void cursorsio::server::start(uint16_t port, const std::string & mapdata){
+void cursorsio::server::start(uint16_t port, const std::string & file){
+	mapfile = file;
+	std::ifstream ifs(mapfile);
+	std::string mapdata( (std::istreambuf_iterator<char>(ifs) ),
+				(std::istreambuf_iterator<char>()));
 	cursorsio::map::parse(this, mapdata, maps);
 	websocketpp::lib::thread thr([&](){cursorsio::server::button_thread();});
 	thr.detach();
+	websocketpp::lib::thread thr1([&](){cursorsio::server::cmd_thread();});
+	thr1.detach();
 	s.clear_access_channels(websocketpp::log::alevel::all);
 	s.set_access_channels(websocketpp::log::alevel::connect);
 	s.set_access_channels(websocketpp::log::alevel::disconnect);
 	s.set_access_channels(websocketpp::log::alevel::app);
 	
+	s.set_reuse_addr(true);
+	
 	s.listen(asio::ip::tcp::v4(), port);
 	s.start_accept();
 	s.run();
+}
+
+void cursorsio::server::reload(){
+	if(reloadstate != 0)
+		return;
+	std::cout << "Reloading the server..." << std::endl;
+	reloadstate = 1;
+	while(reloadstate == 1){
+		std::this_thread::sleep_for(std::chrono::milliseconds(500));
+	}
+	conn_mmtx.lock();
+	std::ifstream ifs(mapfile);
+	std::string mapdata( (std::istreambuf_iterator<char>(ifs) ),
+				(std::istreambuf_iterator<char>()));
+	maps.clear();
+	std::queue<uint32_t> empty;
+	std::swap(freed_ids, empty);
+	used_ids = 0;
+	cursorsio::map::parse(this, mapdata, maps);
+	for(auto& client : clients){
+		std::vector<uint8_t> bytes = {STYPE_SET_CLIENT_ID};
+		client.second.id = cursorsio::server::get_id();
+		addtoarr(client.second.id, bytes);
+		s.send(client.first, &bytes[0], bytes.size(), websocketpp::frame::opcode::binary);
+	}
+	conn_mmtx.unlock();
+	reloadstate = 0;
 }
 
 void cursorsio::server::on_open(wsserver* s, websocketpp::connection_hdl hdl) {
@@ -124,7 +159,7 @@ void cursorsio::server::on_message(wsserver* s, websocketpp::connection_hdl hdl,
 
 void cursorsio::server::process_updates(wsserver* s, mapprop_t *map, uint32_t mapid, bool bypass){
 	uint32_t now = js_date_now();
-	if(now - map->updatetime > 90 || bypass){
+	if(now - map->updatetime > 70 || bypass){
 		map->updatetime = now;
 		std::vector<uint8_t> bytes = {STYPE_MAP_UPDATE};
 
@@ -230,7 +265,7 @@ bool cursorsio::server::checkpos(uint16_t x, uint16_t y, uint32_t mapid, websock
 				if(exit.second.isbad){
 					teleport_client(&s, hdl, maps[mapid].startpoint[0], maps[mapid].startpoint[1], mapid);
 				} else {
-					cursorsio::server::nextmap(mapid+exit.second.offset, hdl);
+					cursorsio::server::nextmap(exit.second.linked, hdl);
 				}
 				return true;
 			}
@@ -318,8 +353,21 @@ bool cursorsio::server::checkpos(uint16_t x, uint16_t y, uint32_t mapid, websock
 	return false;
 }
 
+void cursorsio::server::cmd_thread(){
+	while(1){
+		std::string cmd;
+		std::cin >> cmd;
+		if(cmd == "reload")
+			cursorsio::server::reload();
+	}
+}
+
 void cursorsio::server::button_thread(){
 	while(1){
+		while(reloadstate != 0){
+			reloadstate = 2;
+			std::this_thread::sleep_for(std::chrono::milliseconds(500));
+		}
 		long int now = js_date_now();
 		uint16_t updatedbuttons;
 		for(auto it = maps.begin(); it != maps.end(); ++it){
@@ -472,11 +520,9 @@ void cursorsio::server::kick(websocketpp::connection_hdl hdl, bool close){
 int main(int argc, char *argv[]) {
 	if(argc > 1){
 		cursorsio::server s;
-		std::ifstream ifs(argv[1]);
-		std::string mapdata( (std::istreambuf_iterator<char>(ifs) ),
-				     (std::istreambuf_iterator<char>()    ) );
-		s.start(9003, mapdata);
+		
+		s.start(9003, argv[1]);
 	} else {
-		std::cout << "Usage: " << argv[0] << " MAPDATA" << std::endl;
+		std::cout << "Usage: " << argv[0] << " MAP_FILE" << std::endl;
 	}
 }

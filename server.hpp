@@ -64,7 +64,7 @@ struct mapobj_exit_t {
 	uint16_t w;
 	uint16_t h;
 	bool isbad;
-	int offset;
+	uint32_t linked;
 };
 
 struct mapprop_t {
@@ -113,6 +113,7 @@ namespace cursorsio {
 			}
 			
 			void start(uint16_t port, const std::string & mapdata);
+			void reload();
 			
 			void on_open(wsserver* s, websocketpp::connection_hdl hdl);
 			void on_fail(wsserver* s, websocketpp::connection_hdl hdl);
@@ -122,6 +123,7 @@ namespace cursorsio {
 			void updateplayercount();
 			void process_updates(wsserver* s, mapprop_t *map, uint32_t mapid, bool bypass = false);
 			void button_thread();
+			void cmd_thread();
 			
 			void kick(websocketpp::connection_hdl hdl, bool close = true);
 			void teleport_client(wsserver* s, websocketpp::connection_hdl hdl, uint16_t x, uint16_t y, uint32_t G);
@@ -143,9 +145,11 @@ namespace cursorsio {
 			wsserver s;
 			
 			std::vector<mapprop_t> maps;
+			std::string mapfile;
 			
 			std::mutex conn_mmtx;
 			
+			uint8_t reloadstate = 0;
 			uint32_t used_ids = 0;
 			std::queue<uint32_t> freed_ids;
 			
