@@ -27,16 +27,20 @@ long int js_date_now(){
 	return ms;
 }
 
+void cursorsio::server::settimer(){
+	buttontimer = s.set_timer(1000, websocketpp::lib::bind(&cursorsio::server::button_thread,
+					this, websocketpp::lib::placeholders::_1));
+}
+
 void cursorsio::server::start(uint16_t port, const std::string & file){
 	mapfile = file;
 	std::ifstream ifs(mapfile);
 	std::string mapdata( (std::istreambuf_iterator<char>(ifs) ),
 				(std::istreambuf_iterator<char>()));
 	cursorsio::map::parse(this, mapdata, maps);
-	websocketpp::lib::thread thr([&](){cursorsio::server::button_thread();});
-	thr.detach();
-	websocketpp::lib::thread thr1([&](){cursorsio::server::cmd_thread();});
-	thr1.detach();
+	
+	//websocketpp::lib::thread thr1([&](){cursorsio::server::cmd_thread();});
+	//thr1.detach();
 	s.clear_access_channels(websocketpp::log::alevel::all);
 	s.set_access_channels(websocketpp::log::alevel::connect);
 	s.set_access_channels(websocketpp::log::alevel::disconnect);
@@ -46,6 +50,7 @@ void cursorsio::server::start(uint16_t port, const std::string & file){
 	
 	s.listen(asio::ip::tcp::v4(), port);
 	s.start_accept();
+	cursorsio::server::settimer();
 	s.run();
 }
 
@@ -57,7 +62,6 @@ void cursorsio::server::reload(){
 	while(reloadstate == 1){
 		std::this_thread::sleep_for(std::chrono::milliseconds(500));
 	}
-	conn_mmtx.lock();
 	std::ifstream ifs(mapfile);
 	std::string mapdata( (std::istreambuf_iterator<char>(ifs) ),
 				(std::istreambuf_iterator<char>()));
@@ -72,7 +76,6 @@ void cursorsio::server::reload(){
 		addtoarr(client.second.id, bytes);
 		s.send(client.first, &bytes[0], bytes.size(), websocketpp::frame::opcode::binary);
 	}
-	conn_mmtx.unlock();
 	reloadstate = 0;
 }
 
@@ -80,9 +83,7 @@ void cursorsio::server::on_open(wsserver* s, websocketpp::connection_hdl hdl) {
 	std::vector<uint8_t> bytes = {STYPE_SET_CLIENT_ID};
 	uint32_t newid = cursorsio::server::get_id();
 	addtoarr(newid, bytes);
-	conn_mmtx.lock();
 	clients[hdl] = { newid, maps[defaultmap].startpoint[0], maps[defaultmap].startpoint[1], defaultmap };
-	conn_mmtx.unlock();
 	s->send(hdl, &bytes[0], bytes.size(), websocketpp::frame::opcode::binary);
 	cursorsio::server::updateplayercount();
 	cursorsio::server::nextmap(defaultmap, hdl);
@@ -166,7 +167,6 @@ void cursorsio::server::process_updates(wsserver* s, mapprop_t *map, uint32_t ma
 		uint16_t inThisMap = 0;
 		std::vector<uint8_t> clickpos;
 		std::vector<websocketpp::connection_hdl> clhdl;
-		conn_mmtx.lock();
 		for(auto& client : clients){
 			if(client.second.mapid == mapid && inThisMap < 100){
 				addtoarr(client.second.id, clickpos);
@@ -178,7 +178,6 @@ void cursorsio::server::process_updates(wsserver* s, mapprop_t *map, uint32_t ma
 		}
 		addtoarr(inThisMap, bytes);
 		bytes.insert(bytes.end(), &clickpos[0], &clickpos[clickpos.size()]);
-		conn_mmtx.unlock();
 		
 		uint16_t clickTimes = map->click_q.size();
 		addtoarr(clickTimes, bytes);
@@ -212,7 +211,6 @@ void cursorsio::server::process_updates(wsserver* s, mapprop_t *map, uint32_t ma
 		}
 		map->draw_q.clear();
 
-		conn_mmtx.lock();
 		if(map->updplayercount){
 			uint32_t playercount = clients.size();
 			addtoarr(playercount, bytes); // Player count is uint32_t
@@ -223,7 +221,6 @@ void cursorsio::server::process_updates(wsserver* s, mapprop_t *map, uint32_t ma
 			s->send(client, &bytes[0], bytes.size(), websocketpp::frame::opcode::binary);
 		}
 		map->lastcwasupdate = true;
-		conn_mmtx.unlock();
 		return;
 	}
 	map->lastcwasupdate = false;
@@ -362,48 +359,47 @@ void cursorsio::server::cmd_thread(){
 	}
 }
 
-void cursorsio::server::button_thread(){
-	while(1){
-		while(reloadstate != 0){
-			reloadstate = 2;
-			std::this_thread::sleep_for(std::chrono::milliseconds(500));
-		}
-		long int now = js_date_now();
-		uint16_t updatedbuttons;
-		for(auto it = maps.begin(); it != maps.end(); ++it){
-			updatedbuttons = 0;
-			for(auto& button : (*it).buttons){
-				if(button.second.first.count < button.second.first.maxcount &&
-					now - button.second.second > 2000){
-					if(button.second.first.count == 0){
-						for(auto& wall : (*it).walls){
-							if(wall.second.color == button.second.first.color && wall.second.removed){
-								wall.second.removed = false;
-								(*it).objupd_q.push_back({
-									cursorsio::map::create_wall(
-										wall.second.x, wall.second.y,
-										wall.second.w, wall.second.h,
-										wall.second.color,
-										wall.first, true)
-								});
-							}
+void cursorsio::server::button_thread(websocketpp::lib::error_code const& e){
+	if(e){
+		s.get_alog().write(websocketpp::log::alevel::app,
+		"Button timer error!: " + e.message());
+		return;
+	}
+	long int now = js_date_now();
+	uint16_t updatedbuttons;
+	for(auto it = maps.begin(); it != maps.end(); ++it){
+		updatedbuttons = 0;
+		for(auto& button : (*it).buttons){
+			if(button.second.first.count < button.second.first.maxcount &&
+				now - button.second.second > 2000){
+				if(button.second.first.count == 0){
+					for(auto& wall : (*it).walls){
+						if(wall.second.color == button.second.first.color && wall.second.removed){
+							wall.second.removed = false;
+							(*it).objupd_q.push_back({
+								cursorsio::map::create_wall(
+									wall.second.x, wall.second.y,
+									wall.second.w, wall.second.h,
+									wall.second.color,
+									wall.first, true)
+							});
 						}
 					}
-					button.second.first.count++;
-					(*it).objupd_q.push_back({
-						cursorsio::map::create_button(button.second.first.x, button.second.first.y,
-									      button.second.first.w, button.second.first.h,
-									button.second.first.count, button.second.first.color,
-									button.first, true)
-					});
-					updatedbuttons++;
 				}
+				button.second.first.count++;
+				(*it).objupd_q.push_back({
+					cursorsio::map::create_button(button.second.first.x, button.second.first.y,
+							      button.second.first.w, button.second.first.h,
+								button.second.first.count, button.second.first.color,
+								button.first, true)
+				});
+				updatedbuttons++;
 			}
-			if(updatedbuttons > 0 || !(*it).lastcwasupdate)
-				cursorsio::server::process_updates(&s, &(*it), std::distance(maps.begin(), it));
 		}
-		std::this_thread::sleep_for(std::chrono::seconds(1));
+		if(updatedbuttons > 0 || !(*it).lastcwasupdate)
+			cursorsio::server::process_updates(&s, &(*it), std::distance(maps.begin(), it));
 	}
+	cursorsio::server::settimer();
 }
 
 void cursorsio::server::sendmapstate(uint32_t mapid, websocketpp::connection_hdl hdl){
@@ -478,7 +474,6 @@ void cursorsio::server::updateplayercount(){
 
 void cursorsio::server::kick(websocketpp::connection_hdl hdl, bool close){
 	cursorsio::server::free_id(clients[hdl].id);
-	conn_mmtx.lock();
 	clients.erase(hdl);
 	for(auto& map : maps){
 		for(auto& area : map.areas){
@@ -514,7 +509,6 @@ void cursorsio::server::kick(websocketpp::connection_hdl hdl, bool close){
 	if(close)
 		s.close(hdl, 0, "");
 	cursorsio::server::updateplayercount();
-	conn_mmtx.unlock();
 }
 
 int main(int argc, char *argv[]) {

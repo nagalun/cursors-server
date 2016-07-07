@@ -6,13 +6,14 @@
 #include <set>
 #include <sys/time.h>
 
-#include <websocketpp/common/thread.hpp>
+#include <websocketpp/common/asio.hpp>
+#include <websocketpp/transport/asio/connection.hpp>
 #include <websocketpp/config/asio_no_tls.hpp>
 #include <websocketpp/server.hpp>
 
 typedef websocketpp::server<websocketpp::config::asio> wsserver;
 
-using websocketpp::lib::bind;
+//using websocketpp::lib::bind;
 
 enum client_messages : uint8_t {
 	CTYPE_MOVE = 1,
@@ -112,6 +113,8 @@ namespace cursorsio {
 				s.set_fail_handler(bind(&cursorsio::server::on_fail,this,&s,std::placeholders::_1));
 			}
 			
+			void settimer();
+			
 			void start(uint16_t port, const std::string & mapdata);
 			void reload();
 			
@@ -122,7 +125,7 @@ namespace cursorsio {
 			
 			void updateplayercount();
 			void process_updates(wsserver* s, mapprop_t *map, uint32_t mapid, bool bypass = false);
-			void button_thread();
+			void button_thread(websocketpp::lib::error_code const& ec);
 			void cmd_thread();
 			
 			void kick(websocketpp::connection_hdl hdl, bool close = true);
@@ -143,11 +146,12 @@ namespace cursorsio {
 		private:
 			std::map<websocketpp::connection_hdl, cursor_t, std::owner_less<websocketpp::connection_hdl>> clients;
 			wsserver s;
+			wsserver::timer_ptr buttontimer;
 			
 			std::vector<mapprop_t> maps;
 			std::string mapfile;
 			
-			std::mutex conn_mmtx;
+			//std::mutex conn_mmtx;
 			
 			uint8_t reloadstate = 0;
 			uint32_t used_ids = 0;
