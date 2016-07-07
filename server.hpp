@@ -1,19 +1,15 @@
 #include <iostream>
 #include <vector>
 #include <map>
-#include <mutex>
 #include <unordered_map>
 #include <set>
 #include <sys/time.h>
 
 #include <websocketpp/common/asio.hpp>
-#include <websocketpp/transport/asio/connection.hpp>
 #include <websocketpp/config/asio_no_tls.hpp>
 #include <websocketpp/server.hpp>
 
 typedef websocketpp::server<websocketpp::config::asio> wsserver;
-
-//using websocketpp::lib::bind;
 
 enum client_messages : uint8_t {
 	CTYPE_MOVE = 1,
@@ -116,7 +112,7 @@ namespace cursorsio {
 			void settimer();
 			
 			void start(uint16_t port, const std::string & mapdata);
-			void reload();
+			//void reload();
 			
 			void on_open(wsserver* s, websocketpp::connection_hdl hdl);
 			void on_fail(wsserver* s, websocketpp::connection_hdl hdl);
@@ -125,8 +121,8 @@ namespace cursorsio {
 			
 			void updateplayercount();
 			void process_updates(wsserver* s, mapprop_t *map, uint32_t mapid, bool bypass = false);
-			void button_thread(websocketpp::lib::error_code const& ec);
-			void cmd_thread();
+			void watch_timer(websocketpp::lib::error_code const& ec);
+			//void cmd_thread();
 			
 			void kick(websocketpp::connection_hdl hdl, bool close = true);
 			void teleport_client(wsserver* s, websocketpp::connection_hdl hdl, uint16_t x, uint16_t y, uint32_t G);
@@ -146,32 +142,16 @@ namespace cursorsio {
 		private:
 			std::map<websocketpp::connection_hdl, cursor_t, std::owner_less<websocketpp::connection_hdl>> clients;
 			wsserver s;
-			wsserver::timer_ptr buttontimer;
+			wsserver::timer_ptr watchtimer;
 			
 			std::vector<mapprop_t> maps;
 			std::string mapfile;
 			
-			//std::mutex conn_mmtx;
-			
-			uint8_t reloadstate = 0;
 			uint32_t used_ids = 0;
 			std::queue<uint32_t> freed_ids;
 			
 			uint32_t defaultmap = 0;
 	};
-}
-
-template <typename IntType>
-IntType bitsToInt(IntType& result, const unsigned char* bits, unsigned int& offset, bool little_endian = true){
-	result = 0;
-	if (little_endian)
-		for (int n = sizeof(result) + offset; n >= offset; n--)
-			result = (result << 8) +bits[n];
-	else
-		for (unsigned n = offset; n < sizeof(result) + offset; n++)
-			result = (result << 8) +bits[n];
-	offset += sizeof(result);
-	return result;
 }
 
 template <typename IntType>

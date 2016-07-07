@@ -11,13 +11,13 @@
  * Classify walls per color instead of id so i don't have to loop through all of them and compare the color?
  * More error checking
  * Clean my code more
+ * Redo position checking
  * Check for wallhack
  * Add more comments
  * Limit how much data a client can send, and kick if too much
  * Remove unused variables
  * Clean way of shutting down the server
  * Fix instant area -> exit move
- * Use asio timers instead of threads?
  ***/
 
 long int js_date_now(){
@@ -28,7 +28,7 @@ long int js_date_now(){
 }
 
 void cursorsio::server::settimer(){
-	buttontimer = s.set_timer(1000, websocketpp::lib::bind(&cursorsio::server::button_thread,
+	watchtimer = s.set_timer(1000, websocketpp::lib::bind(&cursorsio::server::watch_timer,
 					this, websocketpp::lib::placeholders::_1));
 }
 
@@ -54,9 +54,7 @@ void cursorsio::server::start(uint16_t port, const std::string & file){
 	s.run();
 }
 
-void cursorsio::server::reload(){
-	if(reloadstate != 0)
-		return;
+/*void cursorsio::server::reload(){
 	std::cout << "Reloading the server..." << std::endl;
 	reloadstate = 1;
 	while(reloadstate == 1){
@@ -77,7 +75,7 @@ void cursorsio::server::reload(){
 		s.send(client.first, &bytes[0], bytes.size(), websocketpp::frame::opcode::binary);
 	}
 	reloadstate = 0;
-}
+}*/
 
 void cursorsio::server::on_open(wsserver* s, websocketpp::connection_hdl hdl) {
 	std::vector<uint8_t> bytes = {STYPE_SET_CLIENT_ID};
@@ -110,38 +108,61 @@ void cursorsio::server::on_message(wsserver* s, websocketpp::connection_hdl hdl,
 		} catch(const std::out_of_range) {
 			return;
 		}
-		const unsigned char *bytes = reinterpret_cast<const unsigned char *>(msg->get_payload().c_str());
 		unsigned int o = 1;
-		uint16_t u16;
-		uint32_t u32;
+		uint16_converter u16;
 		switch((uint8_t)msg->get_payload()[0]){
 			case CTYPE_MOVE: {
-				uint16_t x = bitsToInt<uint16_t>(u16, bytes, o);
-				uint16_t y = bitsToInt<uint16_t>(u16, bytes, o);
+				u16.c[0] = msg->get_payload().c_str()[o];
+				u16.c[1] = msg->get_payload().c_str()[o+1];
+				uint16_t x = u16.i;
+				o += 2;
+				u16.c[0] = msg->get_payload().c_str()[o];
+				u16.c[1] = msg->get_payload().c_str()[o+1];
+				uint16_t y = u16.i;
 				if(cursorsio::server::checkpos(x, y, clients[hdl].mapid, hdl, false))
-					break;
+					return;
 				clients[hdl].x = x;
 				clients[hdl].y = y;
-				//uint32_t G = bitsToInt<uint32_t>(u32, bytes, o);
 				break;
 			}
 			case CTYPE_CLICK: {
-				uint16_t x = bitsToInt<uint16_t>(u16, bytes, o);
-				uint16_t y = bitsToInt<uint16_t>(u16, bytes, o);
-				// clients[hdl].x != x && clients[hdl].y != y  <- Is this a good idea?
-				if(cursorsio::server::checkpos(x, y, clients[hdl].mapid, hdl, true))
-					break;
-				maps[clients[hdl].mapid].click_q.push_back({x, y});
-				//uint32_t G = bitsToInt<uint32_t>(u32, bytes, o);
+				if(maps[clients[hdl].mapid].click_q.size() < 50){
+					u16.c[0] = msg->get_payload().c_str()[o];
+					u16.c[1] = msg->get_payload().c_str()[o+1];
+					uint16_t x = u16.i;
+					o += 2;
+					u16.c[0] = msg->get_payload().c_str()[o];
+					u16.c[1] = msg->get_payload().c_str()[o+1];
+					uint16_t y = u16.i;
+					if(cursorsio::server::checkpos(x, y, clients[hdl].mapid, hdl, true))
+						break;
+					clients[hdl].x = x;
+					clients[hdl].y = y;
+					maps[clients[hdl].mapid].click_q.push_back({x, y});
+				} else { return; }
 				break;
 			}
 			case CTYPE_DRAW: {
-				uint16_t x = bitsToInt<uint16_t>(u16, bytes, o);
-				uint16_t y = bitsToInt<uint16_t>(u16, bytes, o);
-				uint16_t x2 = bitsToInt<uint16_t>(u16, bytes, o);
-				uint16_t y2 = bitsToInt<uint16_t>(u16, bytes, o);
-				/*if(clients[hdl].x != x && clients[hdl].y != y*/
-				maps[clients[hdl].mapid].draw_q.push_back({x, y, x2, y2});
+				if(maps[clients[hdl].mapid].draw_q.size() < 80){
+					u16.c[0] = msg->get_payload().c_str()[o];
+					u16.c[1] = msg->get_payload().c_str()[o+1];
+					uint16_t x = u16.i;
+					o += 2;
+					u16.c[0] = msg->get_payload().c_str()[o];
+					u16.c[1] = msg->get_payload().c_str()[o+1];
+					uint16_t y = u16.i;
+					o += 2;
+					u16.c[0] = msg->get_payload().c_str()[o];
+					u16.c[1] = msg->get_payload().c_str()[o+1];
+					uint16_t x2 = u16.i;
+					o += 2;
+					u16.c[0] = msg->get_payload().c_str()[o];
+					u16.c[1] = msg->get_payload().c_str()[o+1];
+					uint16_t y2 = u16.i;
+					clients[hdl].x = x2;
+					clients[hdl].y = y2;
+					maps[clients[hdl].mapid].draw_q.push_back({x, y, x2, y2});
+				} else { return; }
 				break;
 			}
 			default:
@@ -160,7 +181,7 @@ void cursorsio::server::on_message(wsserver* s, websocketpp::connection_hdl hdl,
 
 void cursorsio::server::process_updates(wsserver* s, mapprop_t *map, uint32_t mapid, bool bypass){
 	uint32_t now = js_date_now();
-	if(now - map->updatetime > 70 || bypass){
+	if(now - map->updatetime > 80 || bypass){
 		map->updatetime = now;
 		std::vector<uint8_t> bytes = {STYPE_MAP_UPDATE};
 
@@ -350,21 +371,23 @@ bool cursorsio::server::checkpos(uint16_t x, uint16_t y, uint32_t mapid, websock
 	return false;
 }
 
-void cursorsio::server::cmd_thread(){
+/*void cursorsio::server::cmd_thread(){
 	while(1){
 		std::string cmd;
 		std::cin >> cmd;
 		if(cmd == "reload")
-			cursorsio::server::reload();
+			reloadstate = 1;
 	}
-}
+}*/
 
-void cursorsio::server::button_thread(websocketpp::lib::error_code const& e){
+void cursorsio::server::watch_timer(websocketpp::lib::error_code const& e){
 	if(e){
 		s.get_alog().write(websocketpp::log::alevel::app,
 		"Button timer error!: " + e.message());
 		return;
 	}
+	//if(reloadstate != 0)
+	//	cursorsio::server::reload();
 	long int now = js_date_now();
 	uint16_t updatedbuttons;
 	for(auto it = maps.begin(); it != maps.end(); ++it){
