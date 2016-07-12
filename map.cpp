@@ -98,15 +98,18 @@ void cursorsio::map::parse(cursorsio::server* s, const std::string & mapdata, st
 	for(auto& map : mapjson){
 		mapprop_t newmap;
 		newmap.bytes = {STYPE_MAP_CHANGE};
+		for(int e = 0; e < newmap.map.size(); e++){
+			newmap.map[e] = 0;
+		}
 		uint16_t x = map["startpos"]["x"].get<uint16_t>();
 		uint16_t y = map["startpos"]["y"].get<uint16_t>();
 		addtoarr(x, newmap.bytes);
 		addtoarr(y, newmap.bytes);
 		uint16_t objectCount = map["objects"].size();
 		addtoarr(objectCount, newmap.bytes);
-		newmap.startpoint = { x, y };
 		for(auto& object : map["objects"]){
 			uint32_t id = s->get_id();
+			uint32_t pos = newmap.bytes.size();
 			addtoarr(id, newmap.bytes);
 			std::string t = object["type"].get<std::string>();
 			if(t == "text"){
@@ -122,7 +125,17 @@ void cursorsio::map::parse(cursorsio::server* s, const std::string & mapdata, st
 				uint16_t w = object["w"].get<uint16_t>();
 				uint16_t h = object["h"].get<uint16_t>();
 				uint32_t color = std::stoul(object["color"].get<std::string>(), nullptr, 16);
-				newmap.walls[id] = {x, y, w, h, color, false};
+				//newmap.walls[id] = {x, y, w, h, color, false};
+				for(int g = y; g < y + h; g++){
+					for(int i = x; i < x + w; i++){
+						if(color == 0){
+							newmap.map[i + 400 * g] = 1;
+						} else {
+							newmap.map[i + 400 * g] = pos;
+						}
+					}
+				}
+				newmap.doors[color].push_back({id, pos});
 				std::vector<uint8_t> b = cursorsio::map::create_wall(x, y, w, h, color);
 				newmap.bytes.insert(newmap.bytes.end(), &b[0], &b[b.size()]);
 			} else if(t == "exit") {
@@ -145,7 +158,13 @@ void cursorsio::map::parse(cursorsio::server* s, const std::string & mapdata, st
 					} catch(std::out_of_range) { }
 				}
 				linkto = linkto + offset;
-				newmap.exits[id] = {x, y, w, h, isbad, linkto};
+				newmap.objectdata[id].first = linkto;
+				//newmap.exits[id] = {x, y, w, h, isbad, linkto};
+				for(int g = y; g < y + h; g++){
+					for(int i = x; i < x + w; i++){
+							newmap.map[i + 400 * g] = pos;
+					}
+				}
 				std::vector<uint8_t> b = cursorsio::map::create_exit(x, y, w, h, isbad);
 				newmap.bytes.insert(newmap.bytes.end(), &b[0], &b[b.size()]);
 			} else if(t == "button" || t == "area") {
@@ -157,11 +176,18 @@ void cursorsio::map::parse(cursorsio::server* s, const std::string & mapdata, st
 				uint32_t color = std::stoul(object["color"].get<std::string>(), nullptr, 16);
 				std::vector<uint8_t> b;
 				if(t == "button"){
-					newmap.buttons[id].first = {x, y, w, h, count, count, color};
+					//newmap.buttons[id].first = {x, y, w, h, count, count, color};
 					b = cursorsio::map::create_button(x, y, w, h, count, color);
 				} else {
-					newmap.areas[id].first = {x, y, w, h, count, count, color};
+					//newmap.areas[id].first = {x, y, w, h, count, count, color};
 					b = cursorsio::map::create_area(x, y, w, h, count, color);
+				}
+				/* Store maximum count */
+				newmap.objectdata[id].first = count;
+				for(int g = y; g < y + h; g++){
+					for(int i = x; i < x + w; i++){
+						newmap.map[i + 400 * g] = pos;
+					}
 				}
 				newmap.bytes.insert(newmap.bytes.end(), &b[0], &b[b.size()]);
 			}

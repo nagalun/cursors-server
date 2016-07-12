@@ -24,6 +24,11 @@ enum server_messages : uint8_t {
 	STYPE_TELEPORT_CLIENT
 };
 
+struct click_t {
+	uint16_t x;
+	uint16_t y;
+};
+
 struct line_t {
 	uint16_t x;
 	uint16_t y;
@@ -31,65 +36,46 @@ struct line_t {
 	uint16_t y2;
 };
 
-struct click_t {
-	uint16_t x;
-	uint16_t y;
+struct map_door_t {
+	uint32_t id;
+	uint32_t pos;
 };
 
-struct mapobj_active_t {
-	uint16_t x;
-	uint16_t y;
-	uint16_t w; // width
-	uint16_t h; // height
-	uint16_t count;
-	uint16_t maxcount;
-	uint32_t color;
-};
-
-struct mapobj_wall_t {
-	uint16_t x;
-	uint16_t y;
-	uint16_t w; // width
-	uint16_t h; // height
-	uint32_t color;
-	bool removed;
-};
-
-struct mapobj_exit_t {
-	uint16_t x;
-	uint16_t y;
-	uint16_t w;
-	uint16_t h;
-	bool isbad;
-	uint32_t linked;
-};
-
+// map array contains position of the object in the bytes vector
+// startpoint is fetched from the bytes vector
+// exit data:
+// [(linkedmap,linkedmap)]
+// active buttons list, buttons below maxcount
 struct mapprop_t {
 	std::vector<line_t> draw_q;
 	std::vector<click_t> click_q;
 	std::vector<std::vector<uint8_t>> objupd_q;
 	std::vector<uint32_t> removed_q;
-	std::unordered_map<uint32_t, mapobj_wall_t> walls;
-	std::unordered_map<uint32_t, std::pair<mapobj_active_t, long int>> buttons;
-	std::unordered_map<uint32_t, std::pair<mapobj_active_t, std::set<websocketpp::connection_hdl, std::owner_less<websocketpp::connection_hdl>>>> areas;
-	std::unordered_map<uint32_t, mapobj_exit_t> exits;
-	std::array<uint16_t, 2> startpoint;
+	std::set<uint32_t> openeddoors;
+	std::unordered_map<uint32_t, std::pair<uint32_t, uint16_t>> objectdata;
+	std::unordered_map<uint32_t, std::vector<map_door_t>> doors;
+	std::array<uint32_t, (400 * 300)> map;
 	std::vector<uint8_t> bytes;
 	uint32_t updatetime;
 	bool updplayercount;
 	bool lastcwasupdate;
 };
 
+/* if player is in air, ontile will be 0.
+ * if ontile changed, and it was not 0, update the tile if applicable.
+ * TODO: add changedmap state?
+ */
 struct cursor_t {
 	uint32_t id;
 	uint16_t x;
 	uint16_t y;
 	uint32_t mapid;
+	uint32_t ontile;
 };
 
 union uint16_converter {
 	uint16_t i;
-	uint8_t  c[2];
+	uint8_t c[2];
 };
 
 union uint32_converter {
@@ -130,13 +116,13 @@ namespace cursorsio {
 			void sendmapstate(uint32_t mapid, websocketpp::connection_hdl hdl);
 			bool checkpos(uint16_t x, uint16_t y, uint32_t mapid, websocketpp::connection_hdl hdl, bool click);
 			
-			void free_id(uint32_t id){ freed_ids.push(id); };
+			//void free_id(uint32_t id){ freed_ids.push(id); };
 			uint32_t get_id(){
-				if(!freed_ids.empty()){
+				/*if(!freed_ids.empty()){
 					uint32_t id = freed_ids.front();
 					freed_ids.pop();
 					return id;
-				}
+				}*/
 				return used_ids++;
 			};
 		private:
@@ -147,8 +133,11 @@ namespace cursorsio {
 			std::vector<mapprop_t> maps;
 			std::string mapfile;
 			
-			uint32_t used_ids = 0;
-			std::queue<uint32_t> freed_ids;
+			std::unordered_map<uint32_t, std::pair<uint32_t, uint32_t>> activebuttons;
+			
+			// allocate internal id for air and normal wall
+			uint32_t used_ids = 2;
+			//std::queue<uint32_t> freed_ids;
 			
 			uint32_t defaultmap = 0;
 	};
