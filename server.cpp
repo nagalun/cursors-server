@@ -1,4 +1,5 @@
 #include <fstream>
+#include <math.h>
 
 #include "server.hpp"
 #include "map.hpp"
@@ -83,13 +84,9 @@ void cursorsio::server::on_open(wsserver* s, websocketpp::connection_hdl hdl) {
 	std::vector<uint8_t> bytes = {STYPE_SET_CLIENT_ID};
 	uint32_t newid = cursorsio::server::get_id();
 	addtoarr(newid, bytes);
-	uint16_converter u16;
-	u16.c[0] = maps[defaultmap].bytes[1];
-	u16.c[1] = maps[defaultmap].bytes[2];
-	uint16_t x = u16.i;
-	u16.c[0] = maps[defaultmap].bytes[3];
-	u16.c[1] = maps[defaultmap].bytes[4];
-	clients[hdl] = { newid, x, u16.i /*y*/, defaultmap, 0 };
+	uint16_t pos[2];
+	memcpy(&pos, &maps[defaultmap].bytes, 4);
+	clients[hdl] = { newid, pos[0], pos[1], defaultmap, 0 };
 	s->send(hdl, &bytes[0], bytes.size(), websocketpp::frame::opcode::binary);
 	cursorsio::server::updateplayercount();
 	cursorsio::server::nextmap(defaultmap, hdl);
@@ -117,18 +114,12 @@ void cursorsio::server::on_message(wsserver* s, websocketpp::connection_hdl hdl,
 			return;
 		}
 		unsigned int o = 1;
-		uint16_converter u16;
 		switch((uint8_t)msg->get_payload()[0]){
 			case CTYPE_MOVE: {
 				uint16_t pos[2];
-				u16.c[0] = msg->get_payload().c_str()[o];
-				u16.c[1] = msg->get_payload().c_str()[o+1];
-				pos[0] = u16.i;
-				o += 2;
-				u16.c[0] = msg->get_payload().c_str()[o];
-				u16.c[1] = msg->get_payload().c_str()[o+1];
-				pos[1] = u16.i;
-				if(cursorsio::server::checkpos(pos[0], pos[1], clients[hdl].mapid, hdl, false))
+				memcpy(&pos, &(msg->get_payload().c_str()[o]), 4);
+				if((clients[hdl].x == pos[0] && clients[hdl].y == pos[1])
+				  || cursorsio::server::checkpos(pos[0], pos[1], clients[hdl].mapid, hdl, false))
 					return;
 				clients[hdl].x = pos[0];
 				clients[hdl].y = pos[1];
@@ -137,13 +128,7 @@ void cursorsio::server::on_message(wsserver* s, websocketpp::connection_hdl hdl,
 			case CTYPE_CLICK: {
 				if(maps[clients[hdl].mapid].click_q.size() < 50){
 					uint16_t pos[2];
-					u16.c[0] = msg->get_payload().c_str()[o];
-					u16.c[1] = msg->get_payload().c_str()[o+1];
-					pos[0] = u16.i;
-					o += 2;
-					u16.c[0] = msg->get_payload().c_str()[o];
-					u16.c[1] = msg->get_payload().c_str()[o+1];
-					pos[1] = u16.i;
+					memcpy(&pos, &(msg->get_payload().c_str()[o]), 4);
 					if(cursorsio::server::checkpos(pos[0], pos[1], clients[hdl].mapid, hdl, true))
 						break;
 					clients[hdl].x = pos[0];
@@ -155,25 +140,10 @@ void cursorsio::server::on_message(wsserver* s, websocketpp::connection_hdl hdl,
 			case CTYPE_DRAW: {
 				if(maps[clients[hdl].mapid].draw_q.size() < 80){
 					uint16_t pos[4];
-					u16.c[0] = msg->get_payload().c_str()[o];
-					u16.c[1] = msg->get_payload().c_str()[o+1];
-					pos[0] = u16.i;
-					if(u16.i > 400) return;
-					o += 2;
-					u16.c[0] = msg->get_payload().c_str()[o];
-					u16.c[1] = msg->get_payload().c_str()[o+1];
-					pos[1] = u16.i;
-					if(u16.i > 300) return;
-					o += 2;
-					u16.c[0] = msg->get_payload().c_str()[o];
-					u16.c[1] = msg->get_payload().c_str()[o+1];
-					pos[2] = u16.i;
-					if(u16.i > 400) return;
-					o += 2;
-					u16.c[0] = msg->get_payload().c_str()[o];
-					u16.c[1] = msg->get_payload().c_str()[o+1];
-					pos[3] = u16.i;
-					if(u16.i > 300) return;
+					memcpy(&pos, &(msg->get_payload().c_str()[o]), 8);
+					if(pos[0] > 400 || pos[1] > 300 || pos[2] > 400 || pos[3] > 300
+					  || cursorsio::server::checkpos(pos[2], pos[3], clients[hdl].mapid, hdl, false))
+						return;
 					clients[hdl].x = pos[2];
 					clients[hdl].y = pos[3];
 					maps[clients[hdl].mapid].draw_q.push_back({pos[0], pos[1], pos[2], pos[3]});
@@ -253,8 +223,8 @@ void cursorsio::server::process_updates(wsserver* s, mapprop_t *map, uint32_t ma
 				addtoarr(line.x2, bytes);
 				addtoarr(line.y2, bytes);
 			}
+			map->draw_q.clear(); /* test */
 		}
-		map->draw_q.clear();
 
 		if(map->updplayercount){
 			uint32_t playercount = clients.size();
@@ -286,13 +256,10 @@ void cursorsio::server::nextmap(uint32_t mapid, websocketpp::connection_hdl hdl)
 		maps.at(mapid);
 		clients.at(hdl);
 	} catch(const std::out_of_range) { return; }
-	uint16_converter u16;
-	u16.c[0] = maps[mapid].bytes[1];
-	u16.c[1] = maps[mapid].bytes[2];
-	clients[hdl].x = u16.i;
-	u16.c[0] = maps[mapid].bytes[3];
-	u16.c[1] = maps[mapid].bytes[4];
-	clients[hdl].y = u16.i;
+	uint16_t pos[2];
+	memcpy(&pos, &maps[mapid].bytes[1], 4);
+	clients[hdl].x = pos[0];
+	clients[hdl].y = pos[1];
 	clients[hdl].mapid = mapid;
 	
 	s.send(hdl, &maps[mapid].bytes[0], maps[mapid].bytes.size(), websocketpp::frame::opcode::binary);
@@ -303,8 +270,6 @@ void cursorsio::server::nextmap(uint32_t mapid, websocketpp::connection_hdl hdl)
 bool cursorsio::server::checkpos(uint16_t x, uint16_t y, uint32_t mapid, websocketpp::connection_hdl hdl, bool click){
 	uint32_t o = 1;
 	try {
-		maps.at(mapid);
-		clients.at(hdl);
 		o = maps[mapid].map.at(x + 400 * y);
 	} catch(const std::out_of_range) { /* oh shit */ }
 	/* TODO: more wallhack checking here */
@@ -312,29 +277,52 @@ bool cursorsio::server::checkpos(uint16_t x, uint16_t y, uint32_t mapid, websock
 		teleport_client(&s, hdl, clients[hdl].x, clients[hdl].y, mapid);
 		return true;
 	}
+	int dX = x - clients[hdl].x;
+	int dY = y - clients[hdl].y;
+	float dist = sqrt((dX * dX) + (dY * dY));
+	if(dist >= 10){
+		float cX = clients[hdl].x;
+		float cY = clients[hdl].y;
+		for(;sqrt(pow(cX - clients[hdl].x,2) + pow(cY - clients[hdl].y,2)) < dist; cX += (5 / dist) * dX, cY += (5 / dist) * dY){
+			uint16_t p = maps[mapid].map[floor(cX) + 400 * floor(cY)];
+			switch(p){
+				case 0:
+					break;
+				case 1:
+					teleport_client(&s, hdl, clients[hdl].x, clients[hdl].y, mapid);
+					return true;
+					break;
+				default:
+					if(maps[mapid].bytes[p+4] == 1){
+						uint32_t id;
+						memcpy(&id, &maps[mapid].bytes.at(p), 4);
+						if(maps[mapid].openeddoors.find(id) == maps[mapid].openeddoors.end()){
+							teleport_client(&s, hdl, clients[hdl].x, clients[hdl].y, mapid);
+							return true;
+						}
+					}
+					break;
+			}
+		}
+	}
+
 	try {
-		uint16_converter u16;
-		uint32_converter u32;
 		try {
 		if(o != clients[hdl].ontile && maps[mapid].bytes.at(clients[hdl].ontile+4) == 3){
-			u32.c[0] = maps[mapid].bytes[clients[hdl].ontile];
-			u32.c[1] = maps[mapid].bytes[clients[hdl].ontile+1];
-			u32.c[2] = maps[mapid].bytes[clients[hdl].ontile+2];
-			u32.c[3] = maps[mapid].bytes[clients[hdl].ontile+3];
-			u16.c[0] = maps[mapid].bytes[clients[hdl].ontile+13];
-			u16.c[1] = maps[mapid].bytes[clients[hdl].ontile+14];
-			if(maps[mapid].objectdata[u32.i].second > 0){
-				maps[mapid].objectdata[u32.i].second--;
+			uint32_t id;
+			memcpy(&id, &maps[mapid].bytes[clients[hdl].ontile], 4);
+			uint16_t count;
+			memcpy(&count, &maps[mapid].bytes[clients[hdl].ontile+13], 2);
+			if(maps[mapid].objectdata[id].second > 0){
+				maps[mapid].objectdata[id].second--;
 			}
-			uint16_t count = maps[mapid].objectdata[u32.i].second >= maps[mapid].objectdata[u32.i].first ? 0 : maps[mapid].objectdata[u32.i].first - maps[mapid].objectdata[u32.i].second;
-			if(count != u16.i){
-				maps[mapid].bytes[clients[hdl].ontile+13] = count;
-				if(u16.i == 0){
-					u32.c[0] = maps[mapid].bytes[clients[hdl].ontile+15]; /* Color of the area */
-					u32.c[1] = maps[mapid].bytes[clients[hdl].ontile+16];
-					u32.c[2] = maps[mapid].bytes[clients[hdl].ontile+17];
-					u32.c[3] = maps[mapid].bytes[clients[hdl].ontile+18];
-					for(auto& door : maps[mapid].doors[u32.i]){
+			uint16_t newcount = maps[mapid].objectdata[id].second >= maps[mapid].objectdata[id].first ? 0 : maps[mapid].objectdata[id].first - maps[mapid].objectdata[id].second;
+			if(newcount != count){
+				maps[mapid].bytes[clients[hdl].ontile+13] = newcount;
+				if(count == 0){
+					uint32_t color;
+					memcpy(&color, &maps[mapid].bytes[clients[hdl].ontile+15], 4);
+					for(auto& door : maps[mapid].doors[color]){
 						maps[mapid].openeddoors.erase(door.id);
 						std::vector<uint8_t>::const_iterator f = maps[mapid].bytes.begin() + door.pos;
 						std::vector<uint8_t>::const_iterator l = maps[mapid].bytes.begin() + door.pos + 17;
@@ -353,46 +341,40 @@ bool cursorsio::server::checkpos(uint16_t x, uint16_t y, uint32_t mapid, websock
 		}
 		} catch(const std::out_of_range) { }
 		if(o == 0) { clients[hdl].ontile = 0; return false; }
-		u32.c[0] = maps[mapid].bytes.at(o); /* Store the ID for later */
-		u32.c[1] = maps[mapid].bytes[o+1];
-		u32.c[2] = maps[mapid].bytes[o+2];
-		u32.c[3] = maps[mapid].bytes[o+3];
+		uint32_t id;
+		memcpy(&id, &maps[mapid].bytes.at(o), 4); /* Store the id for later */
 		switch(maps[mapid].bytes[o+4]){ /* Switch on the object type */
 			case 1: /* Wall/Door type, in this case, it must be a door, check if its open. */
-				if(maps[mapid].openeddoors.find(u32.i) == maps[mapid].openeddoors.end()){
+				if(maps[mapid].openeddoors.find(id) == maps[mapid].openeddoors.end()){
 					teleport_client(&s, hdl, clients[hdl].x, clients[hdl].y, mapid);
 					return true;
 				}
 				break;
 			case 2: { /* Exit point */
 				if(maps[mapid].bytes.at(o+13) == 1){ /* Check if the exit point is bad */
-					u16.c[0] = maps[mapid].bytes[1];
-					u16.c[1] = maps[mapid].bytes[2];
-					uint16_t x = u16.i;
-					u16.c[0] = maps[mapid].bytes[3];
-					u16.c[1] = maps[mapid].bytes[4]; /* No need to copy y */
-					teleport_client(&s, hdl, x, u16.i, mapid);
+					uint16_t pos[2];
+					memcpy(&pos, &maps[mapid].bytes[1], 4);
+					teleport_client(&s, hdl, pos[0], pos[1], mapid);
 				} else {
 					/* Teleport to linked map. */
-					cursorsio::server::nextmap(maps[mapid].objectdata.at(u32.i).first, hdl);
+					cursorsio::server::nextmap(maps[mapid].objectdata.at(id).first, hdl);
 				}
+				return true;
 				break;
 			}
 			case 3: { /* Area trigger */
 				if(clients[hdl].ontile != o){
 					clients[hdl].ontile = o;
-					u16.c[0] = maps[mapid].bytes.at(o+13);
-					u16.c[1] = maps[mapid].bytes[o+14];
-					maps[mapid].objectdata[u32.i].second++;
-					uint16_t count = maps[mapid].objectdata[u32.i].second >= maps[mapid].objectdata[u32.i].first ? 0 : maps[mapid].objectdata[u32.i].first - maps[mapid].objectdata[u32.i].second;
-					if(count != u16.i){
-						maps[mapid].bytes[o+13] = count;
-						if(count == 0){
-							u32.c[0] = maps[mapid].bytes[o+15]; /* Color of the area */
-							u32.c[1] = maps[mapid].bytes[o+16];
-							u32.c[2] = maps[mapid].bytes[o+17];
-							u32.c[3] = maps[mapid].bytes[o+18];
-							for(auto& door : maps[mapid].doors[u32.i]){
+					uint16_t count;
+					memcpy(&count, &maps[mapid].bytes[o+13], 2);
+					maps[mapid].objectdata[id].second++;
+					uint16_t newcount = maps[mapid].objectdata[id].second >= maps[mapid].objectdata[id].first ? 0 : maps[mapid].objectdata[id].first - maps[mapid].objectdata[id].second;
+					if(newcount != count){
+						maps[mapid].bytes[o+13] = newcount;
+						if(newcount == 0){
+							uint32_t color; /* Color of the area */
+							memcpy(&color, &maps[mapid].bytes[o+15], 4);
+							for(auto& door : maps[mapid].doors[color]){
 								maps[mapid].openeddoors.emplace(door.id);
 								maps[mapid].removed_q.push_back({door.id});
 							}
@@ -410,26 +392,20 @@ bool cursorsio::server::checkpos(uint16_t x, uint16_t y, uint32_t mapid, websock
 			}
 			case 4: { /* Button */
 				if(click){
-					u32.c[0] = maps[mapid].bytes[o+15]; /* Color of the button */
-					u32.c[1] = maps[mapid].bytes[o+16];
-					u32.c[2] = maps[mapid].bytes[o+17];
-					u32.c[3] = maps[mapid].bytes[o+18];
-					if(u32.i == 0){
+					uint32_t color; /* Color of the button */
+					memcpy(&color, &maps[mapid].bytes[o+15], 4);
+					if(color == 0){
 						return false;
 					}
 					/* Button count */
-					u16.c[0] = maps[mapid].bytes.at(o+13);
-					u16.c[1] = maps[mapid].bytes[o+14];
-					if(u16.i > 0){
+					uint16_t count;
+					memcpy(&count, &maps[mapid].bytes[o+13], 2);
+					if(count > 0){
 						/* Decrease counter and update button */
-						u16.i--;
-						maps[mapid].bytes[o+13] = u16.i; /* ... */
-						if(u16.i == 0){
-							u32.c[0] = maps[mapid].bytes[o+15]; /* Color of the button */
-							u32.c[1] = maps[mapid].bytes[o+16];
-							u32.c[2] = maps[mapid].bytes[o+17];
-							u32.c[3] = maps[mapid].bytes[o+18];
-							for(auto& door : maps[mapid].doors[u32.i]){
+						count--;
+						maps[mapid].bytes[o+13] = count; /* ... */
+						if(count == 0){
+							for(auto& door : maps[mapid].doors[color]){
 								maps[mapid].openeddoors.emplace(door.id);
 								maps[mapid].removed_q.push_back({door.id});
 							}
@@ -468,25 +444,18 @@ void cursorsio::server::watch_timer(websocketpp::lib::error_code const& e){
 		return;
 	}
 	uint32_t now = js_date_now();
-	uint32_converter u16;
-	uint32_converter u32;
 	for(auto b = activebuttons.cbegin(); b != activebuttons.cend();){
 		if(now - (*b).second.first > 2000){
 			uint16_t o = (*b).first;
-			u32.c[0] = maps[(*b).second.second].bytes[o]; /* ID */
-			u32.c[1] = maps[(*b).second.second].bytes[o+1];
-			u32.c[2] = maps[(*b).second.second].bytes[o+2];
-			u32.c[3] = maps[(*b).second.second].bytes[o+3];
-			uint32_t id = u32.i;
+			uint32_t id;
+			memcpy(&id, &maps[(*b).second.second].bytes.at(o), 4);
 			uint32_t maxcount = maps[(*b).second.second].objectdata[id].first;
-			u16.c[0] = maps[(*b).second.second].bytes[o+13]; /* Count */
-			u16.c[1] = maps[(*b).second.second].bytes[o+14];
-			if(u16.i == 0){
-				u32.c[0] = maps[(*b).second.second].bytes[o+15]; /* Color */
-				u32.c[1] = maps[(*b).second.second].bytes[o+16];
-				u32.c[2] = maps[(*b).second.second].bytes[o+17];
-				u32.c[3] = maps[(*b).second.second].bytes[o+18];
-				for(auto& door : maps[(*b).second.second].doors[u32.i]){
+			uint16_t count;
+			memcpy(&count, &maps[(*b).second.second].bytes[o+13], 2);
+			if(count == 0){
+				uint32_t color;
+				memcpy(&color, &maps[(*b).second.second].bytes[o+15], 4);
+				for(auto& door : maps[(*b).second.second].doors[color]){
 					maps[(*b).second.second].openeddoors.erase(door.id);
 					std::vector<uint8_t>::const_iterator f = maps[(*b).second.second].bytes.begin() + door.pos;
 					std::vector<uint8_t>::const_iterator l = maps[(*b).second.second].bytes.begin() + door.pos + 17;
@@ -494,8 +463,8 @@ void cursorsio::server::watch_timer(websocketpp::lib::error_code const& e){
 					maps[(*b).second.second].objupd_q.push_back({n});
 				}
 			}
-			u16.i++;
-			maps[(*b).second.second].bytes[o+13] = u16.i;
+			count++;
+			maps[(*b).second.second].bytes[o+13] = count;
 			{
 				std::vector<uint8_t>::const_iterator f = maps[(*b).second.second].bytes.begin() + o;
 				std::vector<uint8_t>::const_iterator l = maps[(*b).second.second].bytes.begin() + o + 19;
@@ -503,7 +472,7 @@ void cursorsio::server::watch_timer(websocketpp::lib::error_code const& e){
 				maps[(*b).second.second].objupd_q.push_back({n});
 			}
 			cursorsio::server::process_updates(&s, &maps[(*b).second.second], (*b).second.second, true);
-			if(u16.i >= maxcount & 0xFFFF){
+			if(count >= (maxcount & 0xFFFF)){
 				activebuttons.erase(b++);
 				continue;
 			}
@@ -552,26 +521,20 @@ void cursorsio::server::kick(websocketpp::connection_hdl hdl, bool close){
 	//cursorsio::server::free_id(clients[hdl].id);
 	try {
 	if(clients[hdl].ontile != 0 && maps[clients[hdl].mapid].bytes.at(clients[hdl].ontile+4) == 3){
-		uint32_converter u32;
-		uint16_converter u16;
-		u32.c[0] = maps[clients[hdl].mapid].bytes[clients[hdl].ontile];
-		u32.c[1] = maps[clients[hdl].mapid].bytes[clients[hdl].ontile+1];
-		u32.c[2] = maps[clients[hdl].mapid].bytes[clients[hdl].ontile+2];
-		u32.c[3] = maps[clients[hdl].mapid].bytes[clients[hdl].ontile+3];
-		u16.c[0] = maps[clients[hdl].mapid].bytes[clients[hdl].ontile+13];
-		u16.c[1] = maps[clients[hdl].mapid].bytes[clients[hdl].ontile+14];
-		if(maps[clients[hdl].mapid].objectdata[u32.i].second > 0){
-			maps[clients[hdl].mapid].objectdata[u32.i].second--;
+		uint32_t id;
+		memcpy(&id, &maps[clients[hdl].mapid].bytes[clients[hdl].ontile], 4);
+		uint16_t count;
+		memcpy(&count, &maps[clients[hdl].mapid].bytes[clients[hdl].ontile+13], 2);
+		if(maps[clients[hdl].mapid].objectdata[id].second > 0){
+			maps[clients[hdl].mapid].objectdata[id].second--;
 		}
-		uint16_t count = maps[clients[hdl].mapid].objectdata[u32.i].second >= maps[clients[hdl].mapid].objectdata[u32.i].first ? 0 : maps[clients[hdl].mapid].objectdata[u32.i].first - maps[clients[hdl].mapid].objectdata[u32.i].second;
-		if(count != u16.i){
-			maps[clients[hdl].mapid].bytes[clients[hdl].ontile+13] = count;
-			if(u16.i == 0){
-				u32.c[0] = maps[clients[hdl].mapid].bytes[clients[hdl].ontile+15]; /* Color of the area */
-				u32.c[1] = maps[clients[hdl].mapid].bytes[clients[hdl].ontile+16];
-				u32.c[2] = maps[clients[hdl].mapid].bytes[clients[hdl].ontile+17];
-				u32.c[3] = maps[clients[hdl].mapid].bytes[clients[hdl].ontile+18];
-				for(auto& door : maps[clients[hdl].mapid].doors[u32.i]){
+		uint16_t newcount = maps[clients[hdl].mapid].objectdata[id].second >= maps[clients[hdl].mapid].objectdata[id].first ? 0 : maps[clients[hdl].mapid].objectdata[id].first - maps[clients[hdl].mapid].objectdata[id].second;
+		if(newcount != count){
+			maps[clients[hdl].mapid].bytes[clients[hdl].ontile+13] = newcount;
+			if(count == 0){
+				uint32_t color;
+				memcpy(&color, &maps[clients[hdl].mapid].bytes[clients[hdl].ontile+15], 4);
+				for(auto& door : maps[clients[hdl].mapid].doors[color]){
 					maps[clients[hdl].mapid].openeddoors.erase(door.id);
 					std::vector<uint8_t>::const_iterator f = maps[clients[hdl].mapid].bytes.begin() + door.pos;
 					std::vector<uint8_t>::const_iterator l = maps[clients[hdl].mapid].bytes.begin() + door.pos + 17;

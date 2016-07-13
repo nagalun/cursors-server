@@ -54,7 +54,7 @@ struct mapprop_t {
 	std::set<uint32_t> openeddoors;
 	std::unordered_map<uint32_t, std::pair<uint32_t, uint16_t>> objectdata;
 	std::unordered_map<uint32_t, std::vector<map_door_t>> doors;
-	std::array<uint32_t, (400 * 300)> map;
+	std::array<uint16_t, (400 * 300)> map;
 	std::vector<uint8_t> bytes;
 	uint32_t updatetime;
 	bool updplayercount;
