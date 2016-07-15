@@ -85,7 +85,7 @@ void cursorsio::server::on_open(wsserver* s, websocketpp::connection_hdl hdl) {
 	uint32_t newid = cursorsio::server::get_id();
 	addtoarr(newid, bytes);
 	uint16_t pos[2];
-	memcpy(&pos, &maps[defaultmap].bytes, 4);
+	memcpy(&pos, &maps[defaultmap].bytes[1], 4);
 	clients[hdl] = { newid, pos[0], pos[1], defaultmap, 0 };
 	s->send(hdl, &bytes[0], bytes.size(), websocketpp::frame::opcode::binary);
 	cursorsio::server::updateplayercount();
