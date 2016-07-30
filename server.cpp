@@ -2,25 +2,20 @@
 #include <math.h>
 
 #include "server.hpp"
-#include "map.hpp"
 
 /* Compile with:
  * g++ -std=gnu++0x -DASIO_STANDALONE server.cpp map.cpp -I./websocketpp/ -I./asio/asio/include/ -lrt -lpthread -O2
  ***/
 
 /* TODO:
- * Classify walls per color instead of id so i don't have to loop through all of them and compare the color?
- * More error checking
+ * More error checking (complete?)
  * Clean my code more
- * Redo position checking
- * Check for wallhack
  * Add more comments
- * Limit how much data a client can send, and kick if too much
  * Remove unused variables
  * Clean way of shutting down the server
- * Fix instant area -> exit move
- * get rid of sendmapstate
- * add limit to how many teleports can the server send
+ * Get rid of sendmapstate
+ * Make cursors not get stuck inside walls
+ * Add admin commands?
  ***/
 
 long int js_date_now(){
@@ -113,13 +108,18 @@ void cursorsio::server::on_message(wsserver* s, websocketpp::connection_hdl hdl,
 		} catch(const std::out_of_range) {
 			return;
 		}
+		clients[hdl].stats.bps += 9;
+		/* Limit is 4,6 KB/s */
+		if(clients[hdl].stats.bps > 4600){
+			cursorsio::server::kick(hdl);
+			return;
+		}
 		unsigned int o = 1;
 		switch((uint8_t)msg->get_payload()[0]){
 			case CTYPE_MOVE: {
 				uint16_t pos[2];
 				memcpy(&pos, &(msg->get_payload().c_str()[o]), 4);
-				if((clients[hdl].x == pos[0] && clients[hdl].y == pos[1])
-				  || cursorsio::server::checkpos(pos[0], pos[1], clients[hdl].mapid, hdl, false))
+				if(cursorsio::server::checkpos(pos[0], pos[1], clients[hdl].mapid, hdl, false))
 					return;
 				clients[hdl].x = pos[0];
 				clients[hdl].y = pos[1];
@@ -141,8 +141,7 @@ void cursorsio::server::on_message(wsserver* s, websocketpp::connection_hdl hdl,
 				if(maps[clients[hdl].mapid].draw_q.size() < 80){
 					uint16_t pos[4];
 					memcpy(&pos, &(msg->get_payload().c_str()[o]), 8);
-					if(pos[0] > 400 || pos[1] > 300 || pos[2] > 400 || pos[3] > 300
-					  || cursorsio::server::checkpos(pos[2], pos[3], clients[hdl].mapid, hdl, false))
+					if(pos[0] > 400 || pos[1] > 300 || cursorsio::server::checkpos(pos[2], pos[3], clients[hdl].mapid, hdl, false))
 						return;
 					clients[hdl].x = pos[2];
 					clients[hdl].y = pos[3];
@@ -158,10 +157,17 @@ void cursorsio::server::on_message(wsserver* s, websocketpp::connection_hdl hdl,
 		}
 		cursorsio::server::process_updates(s, &maps[clients[hdl].mapid], clients[hdl].mapid);
 	} else if(msg->get_opcode() == websocketpp::frame::opcode::text && msg->get_payload().length() <= 80 && '\13' == msg->get_payload().back()) {
-		std::string str = std::to_string(clients[hdl].id) + std::string(": ") + msg->get_payload();
-		for(auto& client : clients){
-			s->send(client.first, str.c_str(), websocketpp::frame::opcode::text);
+		/* Why would you want to send more than 1 message per second? */
+		if(clients[hdl].stats.msgps == 0){
+			std::string str = std::to_string(clients[hdl].id) + std::string(": ") + msg->get_payload();
+			for(auto& client : clients){
+				s->send(client.first, str.c_str(), websocketpp::frame::opcode::text);
+			}
+		} else if(clients[hdl].stats.msgps > 6){
+			cursorsio::server::kick(hdl);
+			return;
 		}
+		clients[hdl].stats.msgps++;
 	} else {
 		s->get_alog().write(websocketpp::log::alevel::app,
 			"Unknown msg received, closing connection for client id: " + std::to_string(clients[hdl].id));
@@ -235,20 +241,23 @@ void cursorsio::server::process_updates(wsserver* s, mapprop_t *map, uint32_t ma
 		for(auto& client : clhdl){
 			s->send(client, &bytes[0], bytes.size(), websocketpp::frame::opcode::binary);
 		}
-		map->lastcwasupdate = true;
+		//map->lastcwasupdate = true; // not needed for now
 		return;
 	}
-	map->lastcwasupdate = false;
+	//map->lastcwasupdate = false;
 }
 
 void cursorsio::server::teleport_client(wsserver* s, websocketpp::connection_hdl hdl, uint16_t x, uint16_t y, uint32_t G){
-	std::vector<uint8_t> bytes = {STYPE_TELEPORT_CLIENT};
-	clients[hdl].x = x;
-	clients[hdl].y = y;
-	addtoarr(x, bytes);
-	addtoarr(y, bytes);
-	addtoarr(G, bytes);
-	s->send(hdl, &bytes[0], bytes.size(), websocketpp::frame::opcode::binary);
+	if(clients[hdl].stats.tps < 15){
+		std::vector<uint8_t> bytes = {STYPE_TELEPORT_CLIENT};
+		clients[hdl].x = x;
+		clients[hdl].y = y;
+		addtoarr(x, bytes);
+		addtoarr(y, bytes);
+		addtoarr(G, bytes);
+		s->send(hdl, &bytes[0], bytes.size(), websocketpp::frame::opcode::binary);
+	}
+	clients[hdl].stats.tps++;
 }
 
 void cursorsio::server::nextmap(uint32_t mapid, websocketpp::connection_hdl hdl){
@@ -268,11 +277,13 @@ void cursorsio::server::nextmap(uint32_t mapid, websocketpp::connection_hdl hdl)
 }
 
 bool cursorsio::server::checkpos(uint16_t x, uint16_t y, uint32_t mapid, websocketpp::connection_hdl hdl, bool click){
+	if(clients[hdl].x == x && clients[hdl].y == y && !click){
+		return false;
+	}
 	uint32_t o = 1;
 	try {
 		o = maps[mapid].map.at(x + 400 * y);
 	} catch(const std::out_of_range) { /* oh shit */ }
-	/* TODO: more wallhack checking here */
 	if(x > 400 || y > 300 || o == 1){
 		teleport_client(&s, hdl, clients[hdl].x, clients[hdl].y, mapid);
 		return true;
@@ -283,7 +294,7 @@ bool cursorsio::server::checkpos(uint16_t x, uint16_t y, uint32_t mapid, websock
 	if(dist >= 10){
 		float cX = clients[hdl].x;
 		float cY = clients[hdl].y;
-		for(;sqrt(pow(cX - clients[hdl].x,2) + pow(cY - clients[hdl].y,2)) < dist; cX += (5 / dist) * dX, cY += (5 / dist) * dY){
+		for(;sqrt(pow(cX - clients[hdl].x,2) + pow(cY - clients[hdl].y,2)) < dist; cX += (10 / dist) * dX, cY += (10 / dist) * dY){
 			uint16_t p = maps[mapid].map[floor(cX) + 400 * floor(cY)];
 			switch(p){
 				case 0:
@@ -480,8 +491,11 @@ void cursorsio::server::watch_timer(websocketpp::lib::error_code const& e){
 		b++;
 	}
 	
-		/*if(updatedbuttons > 0 || !(*it).lastcwasupdate)
-			cursorsio::server::process_updates(&s, &(*it), std::distance(maps.begin(), it));*/
+	for(auto& client : clients){
+		client.second.stats.bps = 0;
+		client.second.stats.msgps = 0;
+		client.second.stats.tps = 0;
+	}
 	cursorsio::server::settimer();
 }
 

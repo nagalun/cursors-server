@@ -44,7 +44,7 @@ struct map_door_t {
 // map array contains position of the object in the bytes vector
 // startpoint is fetched from the bytes vector
 // exit data:
-// [(linkedmap,linkedmap)]
+// [linkedmap, 0]
 // active buttons list, buttons below maxcount
 struct mapprop_t {
 	std::vector<line_t> draw_q;
@@ -62,15 +62,21 @@ struct mapprop_t {
 };
 
 /* if player is in air, ontile will be 0.
- * if ontile changed, and it was not 0, update the tile if applicable.
- * TODO: add changedmap state?
+ * if ontile changed, update the tile if applicable.
  */
+struct stats_t {
+	uint16_t bps;
+	uint8_t msgps;
+	uint16_t tps;
+};
+
 struct cursor_t {
 	uint32_t id;
 	uint16_t x;
 	uint16_t y;
 	uint32_t mapid;
 	uint32_t ontile;
+	stats_t stats;
 };
 
 union uint16_converter {
@@ -141,10 +147,31 @@ namespace cursorsio {
 			
 			uint32_t defaultmap = 0;
 	};
+	class map {
+		enum object_types : uint8_t {
+			TEXT,
+			WALL,
+			EXIT,
+			AREA_TRIGGER,
+			BUTTON
+		};
+		public: 
+			static std::vector<uint8_t> create_text(uint16_t x, uint16_t y, uint8_t size, bool centered, std::string string);
+			static std::vector<uint8_t> create_wall(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint32_t color, uint32_t id = 0, bool isupdate = false);
+			static std::vector<uint8_t> create_exit(uint16_t x, uint16_t y, uint16_t width, uint16_t height, bool isBad, uint32_t id = 0, bool isupdate = false);
+			static std::vector<uint8_t> create_area(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint16_t count, uint32_t color, uint32_t id = 0, bool isupdate = false);
+			static std::vector<uint8_t> create_button(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint16_t count, uint32_t color, uint32_t id = 0, bool isupdate = false);
+			
+			static void parse(cursorsio::server* s, const std::string & mapdata, std::vector<mapprop_t> & maps);
+	};
+	class chat {
+		public:
+			//static std::string handle_cmd(std::string msg, websocketpp::connection_hdl hdl)
+	};
 }
 
 template <typename IntType>
-IntType addtoarr(IntType& number, std::vector<uint8_t>& bytes){
+void addtoarr(IntType& number, std::vector<uint8_t>& bytes){
 	switch(sizeof(number)){
 		case 1:
 			bytes.emplace_back(number);

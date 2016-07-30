@@ -1,7 +1,6 @@
 #include "json.hpp"
 
 #include "server.hpp"
-#include "map.hpp"
 
 std::vector<uint8_t> cursorsio::map::create_text(uint16_t x, uint16_t y,
 						 uint8_t size, bool centered,
@@ -11,7 +10,7 @@ std::vector<uint8_t> cursorsio::map::create_text(uint16_t x, uint16_t y,
 	addtoarr(y, object);
 	addtoarr(size, object);
 	object.emplace_back(centered ? 1 : 0);
-	for(int x = 0; x < string.length(); x++)
+	for(uint32_t x = 0; x < string.length(); x++)
 		object.emplace_back((uint8_t)string.c_str()[x]);
 	object.emplace_back(0);
 	return object;
@@ -98,7 +97,7 @@ void cursorsio::map::parse(cursorsio::server* s, const std::string & mapdata, st
 	for(auto& map : mapjson){
 		mapprop_t newmap;
 		newmap.bytes = {STYPE_MAP_CHANGE};
-		for(int e = 0; e < newmap.map.size(); e++){
+		for(uint32_t e = 0; e < newmap.map.size(); e++){
 			newmap.map[e] = 0;
 		}
 		uint16_t x = map["startpos"]["x"].get<uint16_t>();
@@ -125,7 +124,6 @@ void cursorsio::map::parse(cursorsio::server* s, const std::string & mapdata, st
 				uint16_t w = object["w"].get<uint16_t>();
 				uint16_t h = object["h"].get<uint16_t>();
 				uint32_t color = std::stoul(object["color"].get<std::string>(), nullptr, 16);
-				//newmap.walls[id] = {x, y, w, h, color, false};
 				for(int g = y; g < y + h; g++){
 					for(int i = x; i < x + w; i++){
 						if(color == 0){
@@ -159,7 +157,6 @@ void cursorsio::map::parse(cursorsio::server* s, const std::string & mapdata, st
 				}
 				linkto = linkto + offset;
 				newmap.objectdata[id].first = linkto;
-				//newmap.exits[id] = {x, y, w, h, isbad, linkto};
 				for(int g = y; g < y + h; g++){
 					for(int i = x; i < x + w; i++){
 							newmap.map[i + 400 * g] = pos;
@@ -176,10 +173,8 @@ void cursorsio::map::parse(cursorsio::server* s, const std::string & mapdata, st
 				uint32_t color = std::stoul(object["color"].get<std::string>(), nullptr, 16);
 				std::vector<uint8_t> b;
 				if(t == "button"){
-					//newmap.buttons[id].first = {x, y, w, h, count, count, color};
 					b = cursorsio::map::create_button(x, y, w, h, count, color);
 				} else {
-					//newmap.areas[id].first = {x, y, w, h, count, count, color};
 					b = cursorsio::map::create_area(x, y, w, h, count, color);
 				}
 				/* Store maximum count */
