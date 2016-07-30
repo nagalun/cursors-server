@@ -1,15 +1,11 @@
 #include <iostream>
-#include <vector>
-#include <map>
+#include <string>
+#include <memory.h>
 #include <unordered_map>
 #include <set>
-#include <sys/time.h>
+#include <chrono>
 
-#include <websocketpp/common/asio.hpp>
-#include <websocketpp/config/asio_no_tls.hpp>
-#include <websocketpp/server.hpp>
-
-typedef websocketpp::server<websocketpp::config::asio> wsserver;
+#include <uWS.h>
 
 enum client_messages : uint8_t {
 	CTYPE_MOVE = 1,
@@ -24,61 +20,6 @@ enum server_messages : uint8_t {
 	STYPE_TELEPORT_CLIENT
 };
 
-struct click_t {
-	uint16_t x;
-	uint16_t y;
-};
-
-struct line_t {
-	uint16_t x;
-	uint16_t y;
-	uint16_t x2;
-	uint16_t y2;
-};
-
-struct map_door_t {
-	uint32_t id;
-	uint32_t pos;
-};
-
-// map array contains position of the object in the bytes vector
-// startpoint is fetched from the bytes vector
-// exit data:
-// [linkedmap, 0]
-// active buttons list, buttons below maxcount
-struct mapprop_t {
-	std::vector<line_t> draw_q;
-	std::vector<click_t> click_q;
-	std::vector<std::vector<uint8_t>> objupd_q;
-	std::vector<uint32_t> removed_q;
-	std::set<uint32_t> openeddoors;
-	std::unordered_map<uint32_t, std::pair<uint32_t, uint16_t>> objectdata;
-	std::unordered_map<uint32_t, std::vector<map_door_t>> doors;
-	std::array<uint16_t, (400 * 300)> map;
-	std::vector<uint8_t> bytes;
-	uint32_t updatetime;
-	bool updplayercount;
-	bool lastcwasupdate;
-};
-
-/* if player is in air, ontile will be 0.
- * if ontile changed, update the tile if applicable.
- */
-struct stats_t {
-	uint16_t bps;
-	uint8_t msgps;
-	uint16_t tps;
-};
-
-struct cursor_t {
-	uint32_t id;
-	uint16_t x;
-	uint16_t y;
-	uint32_t mapid;
-	uint32_t ontile;
-	stats_t stats;
-};
-
 union uint16_converter {
 	uint16_t i;
 	uint8_t c[2];
@@ -88,87 +29,6 @@ union uint32_converter {
 	uint32_t i;
 	uint8_t c[4];
 };
-
-namespace cursorsio {
-	class server {
-		public:
-			server(){
-				s.init_asio();
-
-				s.set_message_handler(bind(&cursorsio::server::on_message,this, &s,std::placeholders::_1,std::placeholders::_2));
-				s.set_open_handler(bind(&cursorsio::server::on_open,this,&s,std::placeholders::_1));
-				s.set_close_handler(bind(&cursorsio::server::on_close,this,&s,std::placeholders::_1));
-				s.set_fail_handler(bind(&cursorsio::server::on_fail,this,&s,std::placeholders::_1));
-			}
-			
-			void settimer();
-			
-			void start(uint16_t port, const std::string & mapdata);
-			//void reload();
-			
-			void on_open(wsserver* s, websocketpp::connection_hdl hdl);
-			void on_fail(wsserver* s, websocketpp::connection_hdl hdl);
-			void on_close(wsserver* s, websocketpp::connection_hdl hdl);
-			void on_message(wsserver* s, websocketpp::connection_hdl hdl, wsserver::message_ptr msg);
-			
-			void updateplayercount();
-			void process_updates(wsserver* s, mapprop_t *map, uint32_t mapid, bool bypass = false);
-			void watch_timer(websocketpp::lib::error_code const& ec);
-			//void cmd_thread();
-			
-			void kick(websocketpp::connection_hdl hdl, bool close = true);
-			void teleport_client(wsserver* s, websocketpp::connection_hdl hdl, uint16_t x, uint16_t y, uint32_t G);
-			void nextmap(uint32_t mapid, websocketpp::connection_hdl hdl);
-			void sendmapstate(uint32_t mapid, websocketpp::connection_hdl hdl);
-			bool checkpos(uint16_t x, uint16_t y, uint32_t mapid, websocketpp::connection_hdl hdl, bool click);
-			
-			//void free_id(uint32_t id){ freed_ids.push(id); };
-			uint32_t get_id(){
-				/*if(!freed_ids.empty()){
-					uint32_t id = freed_ids.front();
-					freed_ids.pop();
-					return id;
-				}*/
-				return used_ids++;
-			};
-		private:
-			std::map<websocketpp::connection_hdl, cursor_t, std::owner_less<websocketpp::connection_hdl>> clients;
-			wsserver s;
-			wsserver::timer_ptr watchtimer;
-			
-			std::vector<mapprop_t> maps;
-			std::string mapfile;
-			
-			std::unordered_map<uint32_t, std::pair<uint32_t, uint32_t>> activebuttons;
-			
-			// allocate internal id for air and normal wall
-			uint32_t used_ids = 2;
-			//std::queue<uint32_t> freed_ids;
-			
-			uint32_t defaultmap = 0;
-	};
-	class map {
-		enum object_types : uint8_t {
-			TEXT,
-			WALL,
-			EXIT,
-			AREA_TRIGGER,
-			BUTTON
-		};
-		public: 
-			static std::vector<uint8_t> create_text(uint16_t x, uint16_t y, uint8_t size, bool centered, std::string string);
-			static std::vector<uint8_t> create_wall(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint32_t color, uint32_t id = 0, bool isupdate = false);
-			static std::vector<uint8_t> create_exit(uint16_t x, uint16_t y, uint16_t width, uint16_t height, bool isBad, uint32_t id = 0, bool isupdate = false);
-			static std::vector<uint8_t> create_area(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint16_t count, uint32_t color, uint32_t id = 0, bool isupdate = false);
-			static std::vector<uint8_t> create_button(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint16_t count, uint32_t color, uint32_t id = 0, bool isupdate = false);
-			
-			static void parse(cursorsio::server* s, const std::string & mapdata, std::vector<mapprop_t> & maps);
-	};
-	class chat {
-		public:
-			//static std::string handle_cmd(std::string msg, websocketpp::connection_hdl hdl)
-	};
-}
 
 template <typename IntType>
 void addtoarr(IntType& number, std::vector<uint8_t>& bytes){
@@ -189,4 +49,111 @@ void addtoarr(IntType& number, std::vector<uint8_t>& bytes){
 		}
 			
 	}
+}
+
+struct cursor_t {
+	uint32_t id;
+	uint16_t x;
+	uint16_t y;
+	uint32_t mapid;
+	uint32_t ontile;
+};
+
+struct click_t {
+	uint16_t x;
+	uint16_t y;
+};
+
+struct line_t {
+	uint16_t x;
+	uint16_t y;
+	uint16_t x2;
+	uint16_t y2;
+};
+
+struct map_door_t {
+	uint32_t id;
+	uint32_t pos;
+};
+
+struct mapprop_t {
+	std::vector<line_t> draw_q;
+	std::vector<click_t> click_q;
+	std::vector<std::vector<uint8_t>> objupd_q;
+	std::vector<uint32_t> removed_q;
+	std::set<uint32_t> openeddoors;
+	std::unordered_map<uint32_t, std::pair<uint32_t, uint16_t>> objectdata;
+	std::unordered_map<uint32_t, std::vector<map_door_t>> doors;
+	std::array<uint16_t, (400 * 300)> map;
+	std::vector<uint8_t> bytes;
+	std::chrono::high_resolution_clock::time_point updatetime;
+	bool updplayercount;
+	bool lastcwasupdate;
+};
+
+namespace cursorsio {
+	class server {
+		public:
+			server(uint16_t p){
+				port = p;
+			}
+			void register_events(uWS::Server &server);
+			void run(const std::string &mapfile, uint8_t threads);
+			void updateplayercount();
+			static void watch_timer(uv_timer_t *t);
+			
+			void nextmap(uint32_t mapid, uWS::WebSocket socket);
+			void teleport_client(uWS::WebSocket socket, uint16_t x, uint16_t y, uint32_t G);
+			void process_updates(uint32_t mapid, bool bypass = false);
+			void sendmapstate(uWS::WebSocket socket);
+			bool checkpos(uint16_t &x, uint16_t &y, uWS::WebSocket &socket, bool click = false);
+			void kick(uWS::WebSocket &socket, bool close = false);
+			
+			uint32_t getid(){ return usedids++; };
+		private:
+			uint16_t port;
+			std::unordered_map<uWS::WebSocket, cursor_t> clients;
+			std::vector<mapprop_t> maps;
+			
+			uint32_t usedids = 2;
+			
+			std::unordered_map<uint32_t, std::pair<std::chrono::steady_clock::time_point, uint32_t>> activebuttons;
+			uv_timer_t w_hdl;
+	};
+	class map {
+		enum object_types : uint8_t {
+			TEXT,
+			WALL,
+			EXIT,
+			AREA_TRIGGER,
+			BUTTON
+		};
+		public: 
+			static std::vector<uint8_t> create_text(uint16_t x, uint16_t y,
+								uint8_t size, bool centered, std::string string);
+			
+			static std::vector<uint8_t> create_wall(uint16_t x, uint16_t y,
+								uint16_t width, uint16_t height,
+								uint32_t color, uint32_t id = 0, bool isupdate = false);
+			
+			static std::vector<uint8_t> create_exit(uint16_t x, uint16_t y,
+								uint16_t width, uint16_t height,
+								bool isBad, uint32_t id = 0, bool isupdate = false);
+			
+			static std::vector<uint8_t> create_area(uint16_t x, uint16_t y,
+								uint16_t width, uint16_t height,
+								uint16_t count, uint32_t color,
+								uint32_t id = 0, bool isupdate = false);
+			
+			static std::vector<uint8_t> create_button(uint16_t x, uint16_t y,
+								  uint16_t width, uint16_t height,
+								  uint16_t count, uint32_t color,
+								  uint32_t id = 0, bool isupdate = false);
+			
+			static void parse(cursorsio::server *s, const std::string &mapdata, std::vector<mapprop_t> &maps);
+	};
+	/*class chat {
+		public:
+			static std::string handle_cmd(const std::string &msg, uWS::WebSocket socket)
+	};*/
 }

@@ -107,7 +107,7 @@ void cursorsio::map::parse(cursorsio::server* s, const std::string & mapdata, st
 		uint16_t objectCount = map["objects"].size();
 		addtoarr(objectCount, newmap.bytes);
 		for(auto& object : map["objects"]){
-			uint32_t id = s->get_id();
+			uint32_t id = s->getid();
 			uint32_t pos = newmap.bytes.size();
 			addtoarr(id, newmap.bytes);
 			std::string t = object["type"].get<std::string>();
