@@ -124,6 +124,8 @@ void cursorsio::map::parse(cursorsio::server* s, const std::string & mapdata, st
 				uint16_t w = object["w"].get<uint16_t>();
 				uint16_t h = object["h"].get<uint16_t>();
 				uint32_t color = std::stoul(object["color"].get<std::string>(), nullptr, 16);
+				/* Overlapping objects
+				newmap.objectdata[pos].second = newmap.map[x + 400 * y];*/
 				for(int g = y; g < y + h; g++){
 					for(int i = x; i < x + w; i++){
 						if(color == 0){
@@ -176,6 +178,11 @@ void cursorsio::map::parse(cursorsio::server* s, const std::string & mapdata, st
 					b = cursorsio::map::create_button(x, y, w, h, count, color);
 				} else {
 					b = cursorsio::map::create_area(x, y, w, h, count, color);
+					/*if(newmap.map[x + 400 * y] > 1 && newmap.bytes.at(newmap.map[x + 400 * y]+4) == 1){
+						uint32_t id = 0;
+						memcpy(&id, &newmap.bytes[newmap.map[x + 400 * y]], 4);
+						newmap.objectdata[newmap.map[x + 400 * y]].second = pos;
+					}*/
 				}
 				/* Store maximum count */
 				newmap.objectdata[id].first = count;

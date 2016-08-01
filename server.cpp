@@ -191,23 +191,39 @@ void cursorsio::server::process_updates(uint32_t mapid, bool bypass){
 	//maps[mapid].lastcwasupdate = false;
 }
 
+bool cursorsio::server::issolid(uint16_t pos, uint32_t mapid){
+	if(pos < 2) return !!pos;
+	try {
+		switch((uint8_t)maps[mapid].bytes.at(pos+4)){
+			case 1: {
+				uint32_t id;
+				memcpy(&id, &maps[mapid].bytes[pos], 4);
+				if(maps[mapid].openeddoors.find(id) == maps[mapid].openeddoors.end()){
+					return true;
+				}
+			}
+		}
+	} catch(std::out_of_range) { }
+	return false;
+}
+
 std::array<uint16_t, 2> cursorsio::server::correctpos(uint16_t x, uint16_t y, uint32_t mapid){
-	int offsetx = 0;
-	int offsety = 0;
+	short int offsetx = 0;
+	short int offsety = 0;
 	for(uint16_t i = 0; i < 400; i++){
-		if(x - i >= 0 && maps[mapid].map[x - i + 400 * y] == 0) offsetx = -i;
-		if(x + i < 400 && maps[mapid].map[x + i + 400 * y] == 0) offsetx = i;
+		if(x - i >= 0 && !issolid(maps[mapid].map[x - i + 400 * y], mapid)) offsetx = -i;
+		if(x + i < 400 && !issolid(maps[mapid].map[x + i + 400 * y], mapid)) offsetx = i;
 		if(offsetx != 0) break;
 	}
 	for(uint16_t i = 0; i < 300; i++){
-		if(y - i >= 0 && maps[mapid].map[x + 400 * (y - i)] == 0) offsety = -i;
-		if(y + i < 300 && maps[mapid].map[x + 400 * (y + i)] == 0) offsety = i;
+		if(y - i >= 0 && !issolid(maps[mapid].map[x + 400 * (y - i)], mapid)) offsety = -i;
+		if(y + i < 300 && !issolid(maps[mapid].map[x + 400 * (y + i)], mapid)) offsety = i;
 		if(offsety != 0) break;
 	}
-	if(offsetx != 0 && (offsetx < 0 ? -offsetx : offsetx) < (offsety < 0 ? -offsety : offsety)) return std::array<uint16_t, 2>{x+offsetx, y};
-	else if(offsety != 0) return std::array<uint16_t, 2>{x, y+offsety};
 	std::array<uint16_t, 2> pos = {x, y};
-	memcpy(&pos, &maps[mapid].bytes[1], 4);
+	if(offsetx != 0 && (offsetx < 0 ? -offsetx : offsetx) < (offsety < 0 ? -offsety : offsety)) pos[0] = x + offsetx;
+	else if(offsety != 0) pos[1] = y + offsety;
+	else memcpy(&pos, &maps[mapid].bytes[1], 4);
 	return pos;
 }
 
@@ -352,7 +368,7 @@ bool cursorsio::server::checkpos(uint16_t &x, uint16_t &y, uWS::WebSocket &socke
 	} catch(const std::out_of_range) { }
 	/* If bypass was already set to true, don't set it to false */
 	if(o != clients[socket].ontile)
-		bypass = updatetile(socket) ? true : bypass ? true : false;
+		bypass = updatetile(socket/*, o*/) ? true : bypass ? true : false;
 	clients[socket].ontile = o;
 	clients[socket].x = x;
 	clients[socket].y = y;
@@ -373,6 +389,8 @@ void cursorsio::server::nextmap(uint32_t mapid, uWS::WebSocket socket){
 		maps.at(mapid);
 		clients.at(socket);
 	} catch(const std::out_of_range) { return; }
+	if(clients[socket].ontile != 0 && updatetile(socket))
+			process_updates(clients[socket].mapid, true);
 	uint16_t pos[2];
 	memcpy(&pos, &maps[mapid].bytes[1], 4);
 	clients[socket].x = pos[0];
@@ -384,11 +402,20 @@ void cursorsio::server::nextmap(uint32_t mapid, uWS::WebSocket socket){
 	process_updates(mapid, mapid!=0);
 }
 
-bool cursorsio::server::updatetile(uWS::WebSocket socket){
+bool cursorsio::server::updatetile(uWS::WebSocket socket/*, uint16_t newtile*/){
 	const uint8_t mapid = clients[socket].mapid;
 	try {
 		switch((uint8_t)maps[mapid].bytes.at(clients[socket].ontile+4)){
+			/*case 1: {
+				if(maps[mapid].objectdata[clients[socket].ontile].second != 0){
+					
+				}
+			}*/
 			case 3: {
+				/*if(newtile > 1 && (uint8_t)maps[mapid].bytes.at(newtile+4) == 1 && maps[mapid].objectdata[newtile].second == clients[socket].ontile){
+					std::cout << "overlap" << std::endl;
+					return false;
+				}*/
 				uint32_t id;
 				memcpy(&id, &maps[mapid].bytes[clients[socket].ontile], 4);
 				uint16_t count;
@@ -446,8 +473,8 @@ void cursorsio::server::sendmapstate(uWS::WebSocket socket){
 void cursorsio::server::watch_timer(uv_timer_t *t){
 	cursorsio::server *s = (cursorsio::server *) t->data;
 	auto now = std::chrono::steady_clock::now();
-	/* TODO: Fix this so it sends all button updates in one process_updates per map? */
-        /* Also make it less horrible */
+        /* TODO: Make it less horrible, and fix the buttons getting stuck */
+	std::set<uint32_t> mapstoupdate;
 	for(auto b = s->activebuttons.cbegin(); b != s->activebuttons.cend();){
 		if(std::chrono::duration_cast<std::chrono::milliseconds>(now - (*b).second.first).count() > 2000){
 			uint16_t o = (*b).first;
@@ -469,13 +496,16 @@ void cursorsio::server::watch_timer(uv_timer_t *t){
 			s->maps[(*b).second.second].bytes[o+13] = count;
 			std::vector<uint8_t> n(&s->maps[(*b).second.second].bytes[o], &s->maps[(*b).second.second].bytes[o+19]);
 			s->maps[(*b).second.second].objupd_q.push_back({n});
-			s->process_updates((*b).second.second, true);
+			mapstoupdate.emplace((*b).second.second);
 			if(count >= (maxcount & 0xFFFF)){
 				s->activebuttons.erase(b++);
 				continue;
 			}
 		}
 		b++;
+	}
+	for(auto& mapid : mapstoupdate){
+		s->process_updates(mapid, true);
 	}
 }
 
