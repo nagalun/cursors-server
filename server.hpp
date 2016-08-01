@@ -102,6 +102,9 @@ namespace cursorsio {
 			void updateplayercount();
 			static void watch_timer(uv_timer_t *t);
 			
+			bool updatetile(uWS::WebSocket socket);
+			std::array<uint16_t, 2> correctpos(uint16_t x, uint16_t y, uint32_t mapid);
+			
 			void nextmap(uint32_t mapid, uWS::WebSocket socket);
 			void teleport_client(uWS::WebSocket socket, uint16_t x, uint16_t y, uint32_t G);
 			void process_updates(uint32_t mapid, bool bypass = false);

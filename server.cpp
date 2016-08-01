@@ -9,14 +9,14 @@
  **/
 
 void cursorsio::server::run(const std::string &mapfile, uint8_t threads){
-	std::ifstream ifs;
-	ifs.open(mapfile);
 	{
-	std::string mapdata((std::istreambuf_iterator<char>(ifs)),
-			    (std::istreambuf_iterator<char>()));
-	cursorsio::map::parse(this, mapdata, maps);
+		std::ifstream ifs;
+		ifs.open(mapfile);
+		std::string mapdata((std::istreambuf_iterator<char>(ifs)),
+				    (std::istreambuf_iterator<char>()));
+		cursorsio::map::parse(this, mapdata, maps);
+		ifs.close();
 	}
-	ifs.close();
 	uv_timer_init(uv_default_loop(), &w_hdl);
 	uv_timer_start(&w_hdl, (uv_timer_cb) &watch_timer, 1000, 1000);
 	w_hdl.data = this;
@@ -37,38 +37,8 @@ void cursorsio::server::kick(uWS::WebSocket &socket, bool close){
 	uint32_t mapid = 0;
 	try {
 		mapid = clients.at(socket).mapid;
-		try {
-			if(clients[socket].ontile != 0 && maps[mapid].bytes.at(clients[socket].ontile+4) == 3){
-				uint32_t id;
-				memcpy(&id, &maps[mapid].bytes[clients[socket].ontile], 4);
-				uint16_t count;
-				memcpy(&count, &maps[mapid].bytes[clients[socket].ontile+13], 2);
-				if(maps[mapid].objectdata[id].second > 0){
-					maps[mapid].objectdata[id].second--;
-				}
-				uint16_t newcount = maps[mapid].objectdata[id].second >= maps[mapid].objectdata[id].first ? 0 : maps[mapid].objectdata[id].first - maps[mapid].objectdata[id].second;
-				if(newcount != count){
-					maps[mapid].bytes[clients[socket].ontile+13] = newcount;
-					if(count == 0){
-						uint32_t color;
-						memcpy(&color, &maps[mapid].bytes[clients[socket].ontile+15], 4);
-						for(auto& door : maps[mapid].doors[color]){
-							maps[mapid].openeddoors.erase(door.id);
-							std::vector<uint8_t>::const_iterator f = maps[mapid].bytes.begin() + door.pos;
-							std::vector<uint8_t>::const_iterator l = maps[mapid].bytes.begin() + door.pos + 17;
-							std::vector<uint8_t> n(f, l);
-							maps[mapid].objupd_q.push_back({n});
-						}
-					}
-					{
-						std::vector<uint8_t>::const_iterator f = maps[mapid].bytes.begin() + clients[socket].ontile;
-						std::vector<uint8_t>::const_iterator l = maps[mapid].bytes.begin() + clients[socket].ontile + 19;
-						std::vector<uint8_t> n(f, l);
-						maps[mapid].objupd_q.push_back({n});
-					}
-				}
-			}
-		} catch(const std::out_of_range) { }
+		if(clients[socket].ontile != 0)
+			updatetile(socket);
 		clients.erase(socket);
 	} catch(std::out_of_range) {  }
 	if(close)
@@ -221,15 +191,42 @@ void cursorsio::server::process_updates(uint32_t mapid, bool bypass){
 	//maps[mapid].lastcwasupdate = false;
 }
 
+std::array<uint16_t, 2> cursorsio::server::correctpos(uint16_t x, uint16_t y, uint32_t mapid){
+	int offsetx = 0;
+	int offsety = 0;
+	for(uint16_t i = 0; i < 400; i++){
+		if(x - i >= 0 && maps[mapid].map[x - i + 400 * y] == 0) offsetx = -i;
+		if(x + i < 400 && maps[mapid].map[x + i + 400 * y] == 0) offsetx = i;
+		if(offsetx != 0) break;
+	}
+	for(uint16_t i = 0; i < 300; i++){
+		if(y - i >= 0 && maps[mapid].map[x + 400 * (y - i)] == 0) offsety = -i;
+		if(y + i < 300 && maps[mapid].map[x + 400 * (y + i)] == 0) offsety = i;
+		if(offsety != 0) break;
+	}
+	if(offsetx != 0 && (offsetx < 0 ? -offsetx : offsetx) < (offsety < 0 ? -offsety : offsety)) return std::array<uint16_t, 2>{x+offsetx, y};
+	else if(offsety != 0) return std::array<uint16_t, 2>{x, y+offsety};
+	std::array<uint16_t, 2> pos = {x, y};
+	memcpy(&pos, &maps[mapid].bytes[1], 4);
+	return pos;
+}
+
 void cursorsio::server::teleport_client(uWS::WebSocket socket, uint16_t x, uint16_t y, uint32_t G){
 	//if(clients[hdl].stats.tps < 15){
-		std::vector<uint8_t> bytes = {STYPE_TELEPORT_CLIENT};
-		clients[socket].x = x;
-		clients[socket].y = y;
-		addtoarr(x, bytes);
-		addtoarr(y, bytes);
-		addtoarr(G, bytes);
-		socket.send((char*)(&bytes[0]), bytes.size(), uWS::BINARY);
+	uint16_t atpos = maps[G].map.at(x + 400 * y);
+	/* There is no need to check if the door is open */
+	if(atpos == 1 || atpos != 0 && (uint8_t)maps[G].bytes.at(atpos+4) == 1){
+		std::array<uint16_t, 2> pos = correctpos(x, y, G);
+		x = pos[0];
+		y = pos[1];
+	}
+	std::vector<uint8_t> bytes = {STYPE_TELEPORT_CLIENT};
+	clients[socket].x = x;
+	clients[socket].y = y;
+	addtoarr(x, bytes);
+	addtoarr(y, bytes);
+	addtoarr(G, bytes);
+	socket.send((char*)(&bytes[0]), bytes.size(), uWS::BINARY);
 	//}
 	//clients[hdl].stats.tps++;
 }
@@ -244,7 +241,7 @@ bool cursorsio::server::checkpos(uint16_t &x, uint16_t &y, uWS::WebSocket &socke
 	try {
 		o = maps[mapid].map.at(x + 400 * y);
 	} catch(const std::out_of_range) { /* oh shit */ }
-	if(x > 400 || y > 300 || o == 1){
+	if(x >= 400 || y >= 300 || o == 1){
 		teleport_client(socket, clients[socket].x, clients[socket].y, mapid);
 		return false;
 	}
@@ -277,50 +274,7 @@ bool cursorsio::server::checkpos(uint16_t &x, uint16_t &y, uWS::WebSocket &socke
 		}
 	}
 
-	try {
-		try {
-			/* Need to re-do this */
-			if(o != clients[socket].ontile && maps[mapid].bytes.at(clients[socket].ontile+4) == 3){
-				uint32_t id;
-				memcpy(&id, &maps[mapid].bytes[clients[socket].ontile], 4);
-				uint16_t count;
-				memcpy(&count, &maps[mapid].bytes[clients[socket].ontile+13], 2);
-				if(maps[mapid].objectdata[id].second > 0){
-					maps[mapid].objectdata[id].second--;
-				}
-				uint16_t newcount = maps[mapid].objectdata[id].second >= maps[mapid].objectdata[id].first ? 0 : maps[mapid].objectdata[id].first - maps[mapid].objectdata[id].second;
-				if(newcount != count){
-					maps[mapid].bytes[clients[socket].ontile+13] = newcount;
-					if(count == 0){
-						uint32_t color;
-						memcpy(&color, &maps[mapid].bytes[clients[socket].ontile+15], 4);
-						for(auto& door : maps[mapid].doors[color]){
-							maps[mapid].openeddoors.erase(door.id);
-							std::vector<uint8_t>::const_iterator f = maps[mapid].bytes.begin() + door.pos;
-							std::vector<uint8_t>::const_iterator l = maps[mapid].bytes.begin() + door.pos + 17;
-							std::vector<uint8_t> n(f, l);
-							maps[mapid].objupd_q.push_back({n});
-						}
-					}
-					{
-						std::vector<uint8_t>::const_iterator f = maps[mapid].bytes.begin() + clients[socket].ontile;
-						std::vector<uint8_t>::const_iterator l = maps[mapid].bytes.begin() + clients[socket].ontile + 19;
-						std::vector<uint8_t> n(f, l);
-						maps[mapid].objupd_q.push_back({n});
-					}
-					bypass = true;
-				}
-			}
-		} catch(const std::out_of_range) { }
-		if(o == 0) {
-			clients[socket].ontile = 0;
-			clients[socket].x = x;
-			clients[socket].y = y;
-			if(click)
-				maps[mapid].click_q.push_back({x, y});
-			process_updates(mapid);
-			return true;
-		}
+	if(o != 0) try {
 		uint32_t id;
 		memcpy(&id, &maps[mapid].bytes.at(o), 4); /* Store the id for later */
 		switch(maps[mapid].bytes[o+4]){ /* Switch on the object type */
@@ -360,12 +314,8 @@ bool cursorsio::server::checkpos(uint16_t &x, uint16_t &y, uWS::WebSocket &socke
 								maps[mapid].removed_q.push_back({door.id});
 							}
 						}
-						{
-							std::vector<uint8_t>::const_iterator f = maps[mapid].bytes.begin() + o;
-							std::vector<uint8_t>::const_iterator l = maps[mapid].bytes.begin() + o + 19;
-							std::vector<uint8_t> n(f, l);
-							maps[mapid].objupd_q.push_back({n});
-						}
+						std::vector<uint8_t> updatedata(&maps[mapid].bytes[o], &maps[mapid].bytes[o+19]);
+						maps[mapid].objupd_q.push_back({updatedata});
 						bypass = true;
 					}
 				}
@@ -390,12 +340,8 @@ bool cursorsio::server::checkpos(uint16_t &x, uint16_t &y, uWS::WebSocket &socke
 								maps[mapid].removed_q.push_back({door.id});
 							}
 						}
-						{
-							std::vector<uint8_t>::const_iterator f = maps[mapid].bytes.begin() + o;
-							std::vector<uint8_t>::const_iterator l = maps[mapid].bytes.begin() + o + 19;
-							std::vector<uint8_t> n(f, l);
-							maps[mapid].objupd_q.push_back({n});
-						}
+						std::vector<uint8_t> updatedata(&maps[mapid].bytes[o], &maps[mapid].bytes[o+19]);
+						maps[mapid].objupd_q.push_back({updatedata});
 						bypass = true;
 					}
 					activebuttons[o] = {std::chrono::steady_clock::now(), mapid};
@@ -403,8 +349,11 @@ bool cursorsio::server::checkpos(uint16_t &x, uint16_t &y, uWS::WebSocket &socke
 				break;
 			}
 		}
-		clients[socket].ontile = o;
 	} catch(const std::out_of_range) { }
+	/* If bypass was already set to true, don't set it to false */
+	if(o != clients[socket].ontile)
+		bypass = updatetile(socket) ? true : bypass ? true : false;
+	clients[socket].ontile = o;
 	clients[socket].x = x;
 	clients[socket].y = y;
 	if(click)
@@ -433,6 +382,40 @@ void cursorsio::server::nextmap(uint32_t mapid, uWS::WebSocket socket){
 	socket.send((char*)(&maps[mapid].bytes[0]), maps[mapid].bytes.size(), uWS::BINARY);
 	sendmapstate(socket);
 	process_updates(mapid, mapid!=0);
+}
+
+bool cursorsio::server::updatetile(uWS::WebSocket socket){
+	const uint8_t mapid = clients[socket].mapid;
+	try {
+		switch((uint8_t)maps[mapid].bytes.at(clients[socket].ontile+4)){
+			case 3: {
+				uint32_t id;
+				memcpy(&id, &maps[mapid].bytes[clients[socket].ontile], 4);
+				uint16_t count;
+				memcpy(&count, &maps[mapid].bytes[clients[socket].ontile+13], 2);
+				if(maps[mapid].objectdata[id].second > 0){
+					maps[mapid].objectdata[id].second--;
+				}
+				uint16_t newcount = maps[mapid].objectdata[id].second >= maps[mapid].objectdata[id].first ? 0 : maps[mapid].objectdata[id].first - maps[mapid].objectdata[id].second;
+				if(newcount != count){
+					maps[mapid].bytes[clients[socket].ontile+13] = newcount;
+					if(count == 0){
+						uint32_t color;
+						memcpy(&color, &maps[mapid].bytes[clients[socket].ontile+15], 4);
+						for(auto& door : maps[mapid].doors[color]){
+							maps[mapid].openeddoors.erase(door.id);
+							std::vector<uint8_t> updatedata(&maps[mapid].bytes[door.pos], &maps[mapid].bytes[door.pos+17]);
+							maps[mapid].objupd_q.push_back({updatedata});
+						}
+					}
+					std::vector<uint8_t> updatedata(&maps[mapid].bytes[clients[socket].ontile], &maps[mapid].bytes[clients[socket].ontile+19]);
+					maps[mapid].objupd_q.push_back({updatedata});
+				}
+				return true;
+			}
+		}
+	} catch(const std::out_of_range) { }
+	return false;
 }
 
 void cursorsio::server::sendmapstate(uWS::WebSocket socket){
@@ -478,20 +461,14 @@ void cursorsio::server::watch_timer(uv_timer_t *t){
 				memcpy(&color, &s->maps[(*b).second.second].bytes[o+15], 4);
 				for(auto& door : s->maps[(*b).second.second].doors[color]){
 					s->maps[(*b).second.second].openeddoors.erase(door.id);
-					std::vector<uint8_t>::const_iterator f = s->maps[(*b).second.second].bytes.begin() + door.pos;
-					std::vector<uint8_t>::const_iterator l = s->maps[(*b).second.second].bytes.begin() + door.pos + 17;
-					std::vector<uint8_t> n(f, l);
+					std::vector<uint8_t> n(&s->maps[(*b).second.second].bytes[door.pos], &s->maps[(*b).second.second].bytes[door.pos+17]);
 					s->maps[(*b).second.second].objupd_q.push_back({n});
 				}
 			}
 			count++;
 			s->maps[(*b).second.second].bytes[o+13] = count;
-			{
-				std::vector<uint8_t>::const_iterator f = s->maps[(*b).second.second].bytes.begin() + o;
-				std::vector<uint8_t>::const_iterator l = s->maps[(*b).second.second].bytes.begin() + o + 19;
-				std::vector<uint8_t> n(f, l);
-				s->maps[(*b).second.second].objupd_q.push_back({n});
-			}
+			std::vector<uint8_t> n(&s->maps[(*b).second.second].bytes[o], &s->maps[(*b).second.second].bytes[o+19]);
+			s->maps[(*b).second.second].objupd_q.push_back({n});
 			s->process_updates((*b).second.second, true);
 			if(count >= (maxcount & 0xFFFF)){
 				s->activebuttons.erase(b++);
