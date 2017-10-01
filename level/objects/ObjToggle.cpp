@@ -2,7 +2,7 @@
 
 #include "../Level.hpp"
 
-ObjToggle::ObjToggle(const std::vector<LevelObject*>& links, uint16_t x, uint16_t y, uint16_t w, uint16_t h, bool state)
+ObjToggle::ObjToggle(const std::vector<LevelObject*>& links, std::uint16_t x, std::uint16_t y, std::uint16_t w, std::uint16_t h, bool state)
 : ObjClickBox(links, x, y, w, h, state ? 1 : 0, 0, state ? 0x51cc00 : 0xe9686d),
   default_state(state) {
 	if (!default_state) { /* This could be dangerous? */
@@ -37,7 +37,7 @@ bool ObjToggle::tick() {
 }
 
 void ObjToggle::reset() {
-	uint8_t def_state = default_state ? 1 : 0;
+	std::uint8_t def_state = default_state ? 1 : 0;
 	if (def_state != count) {
 		click();
 	}

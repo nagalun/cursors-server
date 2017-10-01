@@ -6,12 +6,12 @@
 /* Damn */
 uint32_t playercount = 0;
 
-Server::Server(const uint16_t port)
+Server::Server(const std::uint16_t port)
 	: h(uWS::NO_DELAY, true, 9),
 	  idsys(),
 	  port(port) {
 	h.onConnection([this](uWS::WebSocket<uWS::SERVER> * socket, uWS::HttpRequest req) {
-		const uint32_t id = idsys.get_id();
+		const std::uint32_t id = idsys.get_id();
 		Cursor * const player = new Cursor(id, socket);
 		socket->setUserData(player);
 		if (player == nullptr) {
@@ -24,7 +24,7 @@ Server::Server(const uint16_t port)
 		player->set_lvl(LevelManager::GetLevel(0));
 	});
 	
-	h.onDisconnection([this](uWS::WebSocket<uWS::SERVER> * socket, int c, const char * msg, size_t len) {
+	h.onDisconnection([this](uWS::WebSocket<uWS::SERVER> * socket, int c, const char * msg, std::size_t len) {
 		Cursor * const player = (Cursor *) socket->getUserData();
 		if (player) {
 			--playercount;
@@ -34,7 +34,7 @@ Server::Server(const uint16_t port)
 		}
 	});
 	
-	h.onMessage([this](uWS::WebSocket<uWS::SERVER> * socket, const char * msg, size_t len, uWS::OpCode oc) {
+	h.onMessage([this](uWS::WebSocket<uWS::SERVER> * socket, const char * msg, std::size_t len, uWS::OpCode oc) {
 		Cursor * const player = (Cursor *) socket->getUserData();
 		if (oc == uWS::OpCode::BINARY && len == 9) {
 			const packet_t data = *((packet_t *)(msg + 1));

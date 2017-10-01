@@ -5,14 +5,14 @@
 
 #include <cstring>
 
-Cursor::Cursor(const uint32_t id, uWS::WebSocket<uWS::SERVER> * ws)
+Cursor::Cursor(const std::uint32_t id, uWS::WebSocket<uWS::SERVER> * ws)
 : id(id),
   pos({0, 0}),
   sync(0),
   lvl(nullptr),
   ws(ws) {
-	uint8_t msg[5] = {(uint8_t) ServerMsg::SET_CLIENT_ID};
-	std::memcpy(&msg[1], (char *)&id, sizeof(uint32_t));
+	std::uint8_t msg[5] = {(std::uint8_t) ServerMsg::SET_CLIENT_ID};
+	std::memcpy(&msg[1], (char *)&id, sizeof(std::uint32_t));
 	ws->send((const char *)&msg[0], sizeof(msg), uWS::BINARY);
 }
 
@@ -41,9 +41,9 @@ uWS::WebSocket<uWS::SERVER> * Cursor::get_ws() const {
 
 void Cursor::resync() {
 	++sync;
-	uint8_t msg[9] = {(uint8_t) ServerMsg::TELEPORT_CLIENT};
+	std::uint8_t msg[9] = {(std::uint8_t) ServerMsg::TELEPORT_CLIENT};
 	std::memcpy(&msg[1], (char *)&pos, sizeof(point_t));
-	std::memcpy(&msg[5], (char *)&sync, sizeof(uint32_t));
+	std::memcpy(&msg[5], (char *)&sync, sizeof(std::uint32_t));
 	ws->send((const char *)&msg[0], sizeof(msg), uWS::BINARY);
 }
 
@@ -93,7 +93,7 @@ void Cursor::draw(const packet_t p) {
 	}
 }
 
-void Cursor::serialize(uint8_t * arr) {
+void Cursor::serialize(std::uint8_t * arr) {
 	packet_player_t * str = (packet_player_t *)arr;
 	str->id = id;
 	str->pos = pos;
@@ -101,5 +101,5 @@ void Cursor::serialize(uint8_t * arr) {
 
 size_t Cursor::netsize() {
 	/* ID, X, and Y. */
-	return sizeof(uint32_t) + sizeof(uint16_t) * 2;
+	return sizeof(std::uint32_t) + sizeof(std::uint16_t) * 2;
 }

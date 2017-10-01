@@ -5,7 +5,7 @@
 #include <cstring>
 
 template <typename T>
-FixedArray<T>::FixedArray(const size_t max_items)
+FixedArray<T>::FixedArray(const std::size_t max_items)
 : size(max_items),
   data((T *)std::malloc(size * sizeof(T))),
   i(0) {
@@ -23,7 +23,7 @@ FixedArray<T>::~FixedArray() {
 
 template <typename T>
 void FixedArray<T>::insert(const T value) {
-	const size_t remaining = size - i;
+	const std::size_t remaining = size - i;
 	if(remaining != 0) { /* Check if space is available */
 		data[i] = value;
 		++i;

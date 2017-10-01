@@ -1,5 +1,5 @@
 #pragma once
-#include <stdint.h>
+#include <cstdint>
 #include <vector>
 
 #include "ObjClickBox.hpp"
@@ -11,8 +11,8 @@ public:
 	bool default_state;
 	
 	ObjToggle(const std::vector<LevelObject *>&,
-	          uint16_t x, uint16_t y,
-	          uint16_t w, uint16_t h,
+	          std::uint16_t x, std::uint16_t y,
+	          std::uint16_t w, std::uint16_t h,
 	          bool state);
 	
 	void remove() override;

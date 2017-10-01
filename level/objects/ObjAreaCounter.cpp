@@ -5,7 +5,7 @@
 #include "../../misc/Util.hpp"
 #include "../Level.hpp"
 
-ObjAreaCounter::ObjAreaCounter(std::vector<LevelObject*>& links, uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t count, uint32_t color)
+ObjAreaCounter::ObjAreaCounter(std::vector<LevelObject*>& links, std::uint16_t x, std::uint16_t y, std::uint16_t w, std::uint16_t h, std::uint16_t count, std::uint32_t color)
 : LevelObject(x, y, w, h, ObjectType::AREACOUNTER),
   count(count),
   maxcount(count),
@@ -13,8 +13,8 @@ ObjAreaCounter::ObjAreaCounter(std::vector<LevelObject*>& links, uint16_t x, uin
   links(links) { }
 
 bool ObjAreaCounter::recount() {
-	int32_t newcount = maxcount - onarea.size();
-	uint32_t oldcount = count;
+	std::int32_t newcount = maxcount - onarea.size();
+	std::uint32_t oldcount = count;
 	newcount = newcount <= 0 ? 0 : newcount;
 	if(newcount != count){
 		count = newcount;
@@ -64,14 +64,14 @@ void ObjAreaCounter::reset() {
 	recount();
 }
 
-void ObjAreaCounter::serialize(uint8_t * arr) {
+void ObjAreaCounter::serialize(std::uint8_t * arr) {
 	LevelObject::serialize(arr);
-	size_t offs = LevelObject::netsize();
-	*(uint16_t *)(arr + offs) = count;
-	*(uint32_t *)(arr + offs + 2) = color;
+	std::size_t offs = LevelObject::netsize();
+	*(std::uint16_t *)(arr + offs) = count;
+	*(std::uint32_t *)(arr + offs + 2) = color;
 }
 
 size_t ObjAreaCounter::netsize() { /* 19 */
-	return LevelObject::netsize() + sizeof(uint16_t) + sizeof(uint32_t);
+	return LevelObject::netsize() + sizeof(std::uint16_t) + sizeof(std::uint32_t);
 }
 

@@ -1,5 +1,5 @@
 #pragma once
-#include <stdint.h>
+#include <cstdint>
 #include <cstddef>
 
 #include "../types.hpp"
@@ -10,16 +10,16 @@ class Cursor;
 class LevelObject {
 public:
 	Level * lvl;
-	uint32_t id;
+	std::uint32_t id;
 	/* To prevent the bug when multiple objects remove/add this object from the level. */
-	uint32_t opened_counter;
-	uint16_t x;
-	uint16_t y;
-	uint16_t w;
-	uint16_t h;
+	std::uint32_t opened_counter;
+	std::uint16_t x;
+	std::uint16_t y;
+	std::uint16_t w;
+	std::uint16_t h;
 	ObjectType type;
 
-	LevelObject(uint16_t x, uint16_t y, uint16_t w, uint16_t h, ObjectType type);
+	LevelObject(std::uint16_t x, std::uint16_t y, std::uint16_t w, std::uint16_t h, ObjectType type);
 	virtual ~LevelObject();
 
 	void set_lvl(Level * lvl);
@@ -33,6 +33,6 @@ public:
 	virtual bool tick();
 	virtual void reset();
 
-	virtual void serialize(uint8_t * arr);
-	virtual size_t netsize(); /* 13 */
+	virtual void serialize(std::uint8_t * arr);
+	virtual std::size_t netsize(); /* 13 */
 };

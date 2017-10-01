@@ -13,7 +13,7 @@ Level * LevelManager::GetNextLevel(Level * const lvl) {
 	return ++search != levels.end() ? *search : nullptr;
 }
 
-Level * LevelManager::GetLevel(const size_t index) {
+Level * LevelManager::GetLevel(const std::size_t index) {
 	return index >= levels.size() ? nullptr : levels[index];
 }
 

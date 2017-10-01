@@ -1,5 +1,5 @@
 #pragma once
-#include <stdint.h>
+#include <cstdint>
 
 #include "../types.hpp"
 
@@ -11,7 +11,7 @@ bool inside(box_t, box_t);
 
 bool equal(const point_t *, const point_t *);
 
-int32_t abs(const int32_t);
+int32_t abs(const std::int32_t);
 
-point_t walk(point_t, point_t, uint8_t[400 * 300]);
-point_t unstuck(point_t, uint8_t[400 * 300]);
+point_t walk(point_t, point_t, std::uint8_t[400 * 300]);
+point_t unstuck(point_t, std::uint8_t[400 * 300]);

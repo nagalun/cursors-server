@@ -12,7 +12,7 @@ public:
 	
 	static Level * GetNextLevel(Level * const);
 	static Level * GetPrevLevel(Level * const);
-	static Level * GetLevel(size_t index);
+	static Level * GetLevel(std::size_t index);
 	
 	static Loop * const get_loop();
 	

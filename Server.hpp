@@ -1,20 +1,20 @@
 #pragma once
-#include <stdint.h>
+#include <cstdint>
 
 #include <uWS.h>
 
 #include "types.hpp"
-#include "misc/IDSys.hpp"
+#include "misc/IdSys.hpp"
 
-extern uint32_t playercount;
+extern std::uint32_t playercount;
 
 class Server {
 	uWS::Hub h;
-	IDSys idsys;
-	const uint16_t port;
+	IdSys idsys;
+	const std::uint16_t port;
 
 public:
-	Server(const uint16_t port);
+	Server(const std::uint16_t port);
 	void run();
 };
 

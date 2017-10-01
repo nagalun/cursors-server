@@ -1,5 +1,5 @@
 #pragma once
-#include <stdint.h>
+#include <cstdint>
 
 #include <uWS.h>
 
@@ -9,16 +9,16 @@ class Level;
 
 class Cursor {
 public:
-	const uint32_t id;
+	const std::uint32_t id;
 
 private:
 	point_t pos;
-	uint32_t sync;
+	std::uint32_t sync;
 	Level * lvl;
 	uWS::WebSocket<uWS::SERVER> * ws;
 
 public:
-	Cursor(const uint32_t id, uWS::WebSocket<uWS::SERVER> *);
+	Cursor(const std::uint32_t id, uWS::WebSocket<uWS::SERVER> *);
 	
 	point_t get_pos() const;
 	uWS::WebSocket<uWS::SERVER> * get_ws() const;
@@ -34,6 +34,6 @@ public:
 	void click(const packet_t);
 	void draw(const packet_t);
 	
-	void serialize(uint8_t * arr);
-	size_t netsize(); /* 8 */
+	void serialize(std::uint8_t * arr);
+	std::size_t netsize(); /* 8 */
 };

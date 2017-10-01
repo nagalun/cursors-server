@@ -3,7 +3,7 @@
 #include "../../types.hpp"
 #include "../Level.hpp"
 
-ObjClickBox::ObjClickBox(const std::vector<LevelObject*>& links, uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t count, uint32_t count_speed_msec, uint32_t color)
+ObjClickBox::ObjClickBox(const std::vector<LevelObject*>& links, std::uint16_t x, std::uint16_t y, std::uint16_t w, std::uint16_t h, std::uint16_t count, std::uint32_t count_speed_msec, std::uint32_t color)
 : LevelObject(x, y, w, h, ObjectType::BUTTON),
   count(count),
   maxcount(count),
@@ -31,9 +31,9 @@ bool ObjClickBox::click() {
 }
 
 bool ObjClickBox::tick() {
-	uint32_t t = lvl->get_time();
-	int32_t diff = (int32_t)t - lastclicktime;
-	diff /= (int32_t)count_speed_msec;
+	std::uint32_t t = lvl->get_time();
+	std::int32_t diff = (std::int32_t)t - lastclicktime;
+	diff /= (std::int32_t)count_speed_msec;
 	if(diff > 0 && count < maxcount) {
 		if(count == 0) {
 			for(auto obj : links) {
@@ -60,14 +60,14 @@ void ObjClickBox::reset() {
 	lastclicktime = 0;
 }
 
-void ObjClickBox::serialize(uint8_t * arr) {
+void ObjClickBox::serialize(std::uint8_t * arr) {
 	LevelObject::serialize(arr);
-	size_t offs = LevelObject::netsize();
-	*(uint16_t *)(arr + offs) = count;
-	*(uint32_t *)(arr + offs + 2) = color;
+	std::size_t offs = LevelObject::netsize();
+	*(std::uint16_t *)(arr + offs) = count;
+	*(std::uint32_t *)(arr + offs + 2) = color;
 }
 
 size_t ObjClickBox::netsize() {
-	return LevelObject::netsize() + sizeof(uint16_t) + sizeof(uint32_t);
+	return LevelObject::netsize() + sizeof(std::uint16_t) + sizeof(std::uint32_t);
 }
 
