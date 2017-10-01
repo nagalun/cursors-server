@@ -33,7 +33,7 @@ Level::~Level() {
 
 void Level::RemoveObject(LevelObject * obj) {
 	if (allobjects.erase(obj)) { /* If it did erase */
-		obj_ids.free_id(obj->id);
+		obj_ids.freeId(obj->id);
 		toupdate.erase(obj);
 		objects[(std::uint8_t) obj->type].erase(obj);	
 		objs_to_remove.emplace(obj->id);
@@ -67,7 +67,7 @@ void Level::RemoveObject(LevelObject * obj) {
 LevelObject * Level::AddObject(LevelObject * obj) {
 	if (allobjects.emplace(obj).second) { /* If it was inserted (not already in set) */
 		obj->set_lvl(this);
-		obj->id = obj_ids.get_id();
+		obj->id = obj_ids.getId();
 		objects[(std::uint8_t) obj->type].emplace(obj);
 		std::uint16_t x = obj->x;
 		std::uint16_t y = obj->y;

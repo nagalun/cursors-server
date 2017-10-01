@@ -11,11 +11,12 @@ Server::Server(const std::uint16_t port)
 	  idsys(),
 	  port(port) {
 	h.onConnection([this](uWS::WebSocket<uWS::SERVER> * socket, uWS::HttpRequest req) {
-		const std::uint32_t id = idsys.get_id();
+		const std::uint32_t id = idsys.getId();
 		Cursor * const player = new Cursor(id, socket);
 		socket->setUserData(player);
 		if (player == nullptr) {
-			idsys.free_id(id);
+			std::cerr << "Couldn't allocate memory for new player" << std::endl;
+			idsys.freeId(id);
 			socket->close();
 			return;
 		}
@@ -28,7 +29,7 @@ Server::Server(const std::uint16_t port)
 		Cursor * const player = (Cursor *) socket->getUserData();
 		if (player) {
 			--playercount;
-			idsys.free_id(player->id);
+			idsys.freeId(player->id);
 			player->set_lvl(nullptr);
 			delete player;
 		}
@@ -60,6 +61,8 @@ Server::Server(const std::uint16_t port)
 void Server::run() {
 	puts("Starting server...");
 	LevelManager::initialize_levels(h.getLoop());
-	h.listen(port);
+	if (!h.listen(port)) {
+		std::cerr << "Couldn't listen on port: " << port << std::endl;
+	}
 	h.run();
 }

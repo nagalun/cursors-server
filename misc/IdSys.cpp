@@ -1,7 +1,7 @@
 #include "IdSys.hpp"
 
 IdSys::IdSys()
-: ids(0) { }
+: currentId(0) { }
 
 std::uint32_t IdSys::getId() {
 	std::uint32_t id;
