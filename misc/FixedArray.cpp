@@ -7,18 +7,12 @@
 template <typename T>
 FixedArray<T>::FixedArray(const std::size_t max_items)
 : size(max_items),
-  data((T *)std::malloc(size * sizeof(T))),
-  i(0) {
-	if (data == nullptr) {
-		throw; /* Hm... */
-	} else {
-		std::memset((void *)data, 0, size);
-	}
-}
+  data(new T[max_items]),
+  i(0) { }
 
 template <typename T>
 FixedArray<T>::~FixedArray() {
-	std::free(data);
+	delete[] data;
 }
 
 template <typename T>

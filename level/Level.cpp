@@ -14,7 +14,7 @@ Level::Level(const std::uint16_t x, const std::uint16_t y)
   sentplayercount(0),
   spawn({x, y}),
   lines(80),
-  clicks(300),
+  clicks(100),
   timer_active(false) {
 	std::memset(&map, 0, sizeof(map));
 	tick_timer->setData(this);

@@ -40,8 +40,8 @@ point_t walk(point_t pos1, point_t pos2, std::uint8_t map[400 * 300]) {
 	std::uint16_t y  = pos1.y;
 	std::int32_t dx  =  abs(pos2.x - pos1.x);
 	std::int32_t dy  = -abs(pos2.y - pos1.y);
-	int8_t  sx  = pos1.x < pos2.x ? 1 : -1;
-	int8_t  sy  = pos1.y < pos2.y ? 1 : -1;
+	std::int8_t  sx  = pos1.x < pos2.x ? 1 : -1;
+	std::int8_t  sy  = pos1.y < pos2.y ? 1 : -1;
 	std::int32_t err = dx + dy;
 	std::int32_t er2 = err * 2;
 

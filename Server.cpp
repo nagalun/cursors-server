@@ -1,6 +1,8 @@
 #include "Server.hpp"
 #include "Cursor.hpp"
 
+#include <iostream>
+
 #include "level/LevelManager.hpp"
 
 /* Damn */
