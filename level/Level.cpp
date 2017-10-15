@@ -7,12 +7,18 @@
 
 #include <cstdlib>
 #include <cstring>
+#include <stdexcept>
+
+static auto constexpr levelObjectComparator = [](LevelObject * const a, LevelObject * const b) {
+	return a->id > b->id;
+};
 
 Level::Level(const std::uint16_t x, const std::uint16_t y)
 : tick_timer(new Timer(LevelManager::get_loop())),
   time(0),
   sentplayercount(0),
   spawn({x, y}),
+  allobjects(levelObjectComparator),
   lines(80),
   clicks(100),
   timer_active(false) {
@@ -33,7 +39,6 @@ Level::~Level() {
 
 void Level::RemoveObject(LevelObject * obj) {
 	if (allobjects.erase(obj)) { /* If it did erase */
-		obj_ids.freeId(obj->id);
 		toupdate.erase(obj);
 		objects[(std::uint8_t) obj->type].erase(obj);	
 		objs_to_remove.emplace(obj->id);
@@ -65,14 +70,20 @@ void Level::RemoveObject(LevelObject * obj) {
 }
 
 LevelObject * Level::AddObject(LevelObject * obj) {
+	if (obj->id == 0) {
+		obj->id = obj_ids.getId();
+	}
+	
 	if (allobjects.emplace(obj).second) { /* If it was inserted (not already in set) */
 		obj->set_lvl(this);
-		obj->id = obj_ids.getId();
 		objects[(std::uint8_t) obj->type].emplace(obj);
 		std::uint16_t x = obj->x;
 		std::uint16_t y = obj->y;
 		std::uint16_t w = obj->w;
 		std::uint16_t h = obj->h;
+		if (x + w > 400 || y + h > 300) {
+			throw std::invalid_argument("Object rect goes outside of map, X: " + std::to_string(x) + ", Y: " + std::to_string(y));
+		}
 		for (std::uint16_t ix = x; ix < x + w; ++ix) {
 			for (std::uint16_t iy = y; iy < y + h; ++iy) {
 				/* Neat */

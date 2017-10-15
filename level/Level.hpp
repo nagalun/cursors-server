@@ -1,16 +1,17 @@
 #pragma once
 #include <cstdint>
 #include <unordered_set>
+#include <set>
 #include <vector>
 
 #include <uWS.h>
 
+#include "LevelObject.hpp"
 #include "../types.hpp"
 #include "../misc/FixedArray.hpp"
 #include "../misc/IdSys.hpp"
 
 class Cursor;
-class LevelObject;
 
 class Level {
 private:
@@ -24,7 +25,7 @@ private:
 	std::unordered_set<Cursor *> players;
 	std::unordered_set<LevelObject *> toupdate;
 	std::unordered_set<std::uint32_t> objs_to_remove; /* ID to avoid use after free */
-	std::unordered_set<LevelObject *> allobjects;
+	std::set<LevelObject *, bool(*)(LevelObject * const, LevelObject * const)> allobjects;
 	std::unordered_set<LevelObject *> objects[6];
 	FixedArray<line_t> lines;
 	FixedArray<point_t> clicks;
