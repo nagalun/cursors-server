@@ -9,6 +9,7 @@ Cursor::Cursor(const std::uint32_t id, uWS::WebSocket<uWS::SERVER> * ws)
 : id(id),
   pos({0, 0}),
   sync(0),
+  packetBucket(2000, 1),
   lvl(nullptr),
   ws(ws) {
 	std::uint8_t msg[5] = {(std::uint8_t) ServerMsg::SET_CLIENT_ID};
@@ -37,7 +38,11 @@ void Cursor::set_lvl(Level * nlvl) {
 
 uWS::WebSocket<uWS::SERVER> * Cursor::get_ws() const {
 	return ws;
-};
+}
+
+bool Cursor::canReceive() {
+	return packetBucket.can_spend();
+}
 
 void Cursor::resync() {
 	++sync;

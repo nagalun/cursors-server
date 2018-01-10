@@ -4,6 +4,7 @@
 #include <uWS.h>
 
 #include "types.hpp"
+#include "limiter.hpp"
 
 class Level;
 
@@ -14,6 +15,7 @@ public:
 private:
 	point_t pos;
 	std::uint32_t sync;
+	limiter::Bucket packetBucket;
 	Level * lvl;
 	uWS::WebSocket<uWS::SERVER> * ws;
 
@@ -25,6 +27,8 @@ public:
 	
 	Level * const get_lvl() const;
 	void set_lvl(Level *);
+	
+	bool canReceive();
 	
 	void resync();
 	void tp(const point_t);

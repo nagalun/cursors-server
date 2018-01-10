@@ -1,6 +1,6 @@
 LOBJS   = level/Level.cpp level/LevelObject.cpp level/LevelManager.cpp
 LOOBJS := $(shell find level/objects/ -name '*.cpp')
-MOBJS   = misc/FixedArray.cpp misc/IdSys.cpp misc/Util.cpp
+MOBJS   = misc/FixedArray.cpp misc/IdSys.cpp misc/Util.cpp limiter.cpp
 OBJS    = main.cpp Server.cpp Cursor.cpp
 
 UWS = uWebSockets/src/Extensions.cpp uWebSockets/src/Group.cpp uWebSockets/src/Epoll.cpp uWebSockets/src/Networking.cpp uWebSockets/src/Hub.cpp uWebSockets/src/Node.cpp uWebSockets/src/WebSocket.cpp uWebSockets/src/HTTPSocket.cpp uWebSockets/src/Socket.cpp

@@ -14,6 +14,7 @@ Server::Server(const std::uint16_t port)
 	  port(port) {
 	h.onConnection([this](uWS::WebSocket<uWS::SERVER> * socket, uWS::HttpRequest req) {
 		const std::uint32_t id = idsys.getId();
+		auto info = socket->getAddress();
 		Cursor * const player = new Cursor(id, socket);
 		socket->setUserData(player);
 		if (player == nullptr) {
@@ -22,7 +23,7 @@ Server::Server(const std::uint16_t port)
 			socket->close();
 			return;
 		}
-		printf("Got ID: %i\n", id);
+		std::cout << "[" << id << "/" << info.address << "]: New client" << std::endl;
 		++playercount;
 		player->set_lvl(LevelManager::GetLevel(0));
 	});
@@ -39,7 +40,7 @@ Server::Server(const std::uint16_t port)
 	
 	h.onMessage([this](uWS::WebSocket<uWS::SERVER> * socket, const char * msg, std::size_t len, uWS::OpCode oc) {
 		Cursor * const player = (Cursor *) socket->getUserData();
-		if (oc == uWS::OpCode::BINARY && len == 9) {
+		if (oc == uWS::OpCode::BINARY && len == 9 && player->canReceive()) {
 			const packet_t data = *((packet_t *)(msg + 1));
 			switch ((ClientMsg)msg[0]) {
 			case ClientMsg::MOVE:
@@ -58,6 +59,8 @@ Server::Server(const std::uint16_t port)
 			socket->close();
 		}
 	});
+
+	h.getDefaultGroup<uWS::SERVER>().startAutoPing(2500);
 }
 
 void Server::run() {
@@ -65,6 +68,8 @@ void Server::run() {
 	LevelManager::initialize_levels(h.getLoop());
 	if (!h.listen(port)) {
 		std::cerr << "Couldn't listen on port: " << port << std::endl;
+		return;
 	}
+	std::cout << "Listening on port: " << port << std::endl;
 	h.run();
 }

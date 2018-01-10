@@ -33,7 +33,7 @@ private:
 
 public:
 	Level(const std::uint16_t x, const std::uint16_t y);
-	~Level();
+	virtual ~Level();
 
 	void RemoveObject(LevelObject * obj);
 
