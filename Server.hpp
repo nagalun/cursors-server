@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <string>
 
 #include <uWS.h>
 
@@ -11,10 +12,11 @@ extern std::uint32_t playercount;
 class Server {
 	uWS::Hub h;
 	IdSys idsys;
+	const std::string addr;
 	const std::uint16_t port;
 
 public:
-	Server(const std::uint16_t port);
+	Server(std::string addr, const std::uint16_t port);
 	void run();
 };
 

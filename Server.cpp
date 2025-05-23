@@ -3,18 +3,42 @@
 
 #include <iostream>
 
+#ifdef UWS_UDS
+#include <sys/types.h>
+#include <sys/stat.h>
+#endif
+
 #include "level/LevelManager.hpp"
 
 /* Damn */
 uint32_t playercount = 0;
 
-Server::Server(const std::uint16_t port)
+std::string getSocketIp(uS::Socket * s, uWS::HttpRequest req) {
+	auto addr = s->getAddress();
+	switch (addr.family[3]) {
+		case '6':
+		case '4':
+			return addr.address;
+			break;
+
+#ifdef UWS_UDS
+		case 'X': {
+			uWS::Header h = req.getHeader("x-real-ip", 9);
+			return h ? h.toString() : "";
+		} break;
+#endif
+	}
+
+	return "";
+}
+
+Server::Server(std::string addr, const std::uint16_t port)
 	: h(uWS::NO_DELAY, true, 9),
-	  idsys(),
+	  addr(std::move(addr)),
 	  port(port) {
 	h.onConnection([this](uWS::WebSocket<uWS::SERVER> * socket, uWS::HttpRequest req) {
 		const std::uint32_t id = idsys.getId();
-		auto info = socket->getAddress();
+		auto info = getSocketIp(socket, req);
 		Cursor * const player = new Cursor(id, socket);
 		socket->setUserData(player);
 		if (player == nullptr) {
@@ -23,7 +47,7 @@ Server::Server(const std::uint16_t port)
 			socket->close();
 			return;
 		}
-		std::cout << "[" << id << "/" << info.address << "]: New client" << std::endl;
+		std::cout << "[" << id << "/" << info << "]: New client" << std::endl;
 		++playercount;
 		player->set_lvl(LevelManager::GetLevel(0));
 	});
@@ -66,10 +90,20 @@ Server::Server(const std::uint16_t port)
 void Server::run() {
 	puts("Starting server...");
 	LevelManager::initialize_levels(h.getLoop());
-	if (!h.listen(port)) {
-		std::cerr << "Couldn't listen on port: " << port << std::endl;
+
+#ifdef UWS_UDS
+	auto m = umask(0);
+#endif
+
+	if (!h.listen(addr.c_str(), port)) {
+		std::cerr << "Couldn't listen on: " << addr << ':' << port << std::endl;
 		return;
 	}
-	std::cout << "Listening on port: " << port << std::endl;
+
+#ifdef UWS_UDS
+	umask(m);
+#endif
+
+	std::cout << "Listening on: " << addr << ':' << port << std::endl;
 	h.run();
 }

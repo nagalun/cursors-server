@@ -9,15 +9,17 @@ ALLOBJS = $(OBJS) $(MOBJS) $(LOBJS) $(LOOBJS) $(UWS)
 
 CC = g++
 
-COMPILER_FLAGS = -Wall -std=gnu++0x -O2
+COMPILER_FLAGS = -Wall -std=c++17
+REL_CFLAGS = -O2
+DBG_CFLAGS = -Og -g
 
 LIBS = -I ./uWebSockets/src/ -lcrypto -lssl -lz
 
 OUT = out
 
 all : $(ALLOBJS)
-	$(CC) $(ALLOBJS) $(COMPILER_FLAGS) $(LIBS) -o $(OUT)
+	$(CC) $(ALLOBJS) $(COMPILER_FLAGS) $(REL_CFLAGS) $(LIBS) -o $(OUT)
 
 g : $(ALLOBJS)
-	$(CC) $(ALLOBJS) -Wall -std=gnu++0x -Og -g $(LIBS) -o $(OUT)
+	$(CC) $(ALLOBJS) $(COMPILER_FLAGS) $(DBG_CFLAGS) $(LIBS) -o $(OUT)
 
